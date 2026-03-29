@@ -1,0 +1,78 @@
+{
+  "menuItems": [
+    {
+      "id": "1",
+      "name": "Butter Chicken",
+      "price": 350,
+      "category": "Main Course",
+      "description": "Creamy tomato-based curry with tender chicken.",
+      "image": "https://picsum.photos/seed/chicken/400/300",
+      "available": true,
+      "popular": true
+    },
+    {
+      "id": "2",
+      "name": "Paneer Tikka",
+      "price": 280,
+      "category": "Appetizers",
+      "description": "Grilled cottage cheese with spices.",
+      "image": "https://picsum.photos/seed/paneer/400/300",
+      "available": true,
+      "popular": true
+    },
+    {
+      "id": "3",
+      "name": "Mango Lassi",
+      "price": 120,
+      "category": "Beverages",
+      "description": "Sweet yogurt-based mango drink.",
+      "image": "https://picsum.photos/seed/lassi/400/300",
+      "available": true,
+      "popular": false
+    },
+    {
+      "id": "1774767422335",
+      "name": "fgfh",
+      "description": "fg",
+      "price": 121,
+      "categoryId": "main-course",
+      "image": "data:image/webp;base64,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",
+      "isAvailable": true,
+      "isPopular": false
+    }
+  ],
+  "categories": [
+    "Main Course",
+    "Appetizers",
+    "Beverages",
+    "Desserts"
+  ],
+  "orders": [],
+  "tables": [
+    {
+      "id": "table-1",
+      "status": "free",
+      "capacity": 2
+    },
+    {
+      "id": "table-2",
+      "status": "free",
+      "capacity": 4
+    },
+    {
+      "id": "table-3",
+      "status": "occupied",
+      "capacity": 4
+    },
+    {
+      "id": "table-4",
+      "status": "free",
+      "capacity": 6
+    }
+  ],
+  "settings": {
+    "isOpen": true,
+    "whatsappConnected": true,
+    "restaurantName": "Spice Kraft"
+  }
+}

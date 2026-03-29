@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a customer, manager, or admin.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string", "description": "WhatsApp phone number" },
+        "role": { "type": "string", "enum": ["admin", "manager", "user"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "A dish or drink on the menu.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "categoryId": { "type": "string" },
+        "image": { "type": "string", "description": "Image URL" },
+        "isAvailable": { "type": "boolean" },
+        "isPopular": { "type": "boolean" }
+      },
+      "required": ["name", "price", "categoryId"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Menu categories like Starters, Main Course, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "order": { "type": "integer" }
+      },
+      "required": ["name"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "A physical table in the restaurant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "zone": { "type": "string" },
+        "status": { "type": "string", "enum": ["free", "occupied", "reserved"] }
+      },
+      "required": ["number"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tableId": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "menuItemId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "integer" },
+              "price": { "type": "number" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "preparing", "ready", "served", "completed", "cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tableId", "items", "total", "status"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global restaurant settings.",
+      "type": "object",
+      "properties": {
+        "isOpen": { "type": "boolean" },
+        "whatsappConnected": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles" },
+    "/menu": { "schema": "MenuItem", "description": "Menu items" },
+    "/categories": { "schema": "Category", "description": "Menu categories" },
+    "/tables": { "schema": "Table", "description": "Restaurant tables" },
+    "/orders": { "schema": "Order", "description": "Customer orders" },
+    "/settings/global": { "schema": "Settings", "description": "Global config" }
+  }
+}

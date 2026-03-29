@@ -1,0 +1,8 @@
+{
+  "name": "Spice Kraft – Digital Restaurant Experience System",
+  "description": "A premium, intelligent restaurant platform for seamless branding, ordering, and operations.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
