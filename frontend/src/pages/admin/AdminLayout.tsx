@@ -12,8 +12,8 @@ import {
   BarChart3
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { auth } from "../../firebase";
-import { cn } from "../../lib/utils";
+import { auth } from "../../api/firebase";
+import { cn } from "../../api/utils";
 
 const AdminLayout = () => {
   const location = useLocation();

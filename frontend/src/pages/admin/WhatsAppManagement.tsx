@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { MessageSquare, QrCode, CheckCircle2, RefreshCw, Send, Loader2, XCircle, Users, CheckSquare, Square } from "lucide-react";
 import { motion } from "motion/react";
-import { cn } from "../../lib/utils";
-import { api } from "../../services/api";
+import { cn, formatCurrency } from "../../api/utils";
+import { api } from "../../api/api";
 
 const WhatsAppManagement = () => {
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");

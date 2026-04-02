@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Table } from "../../types";
-import { api } from "../../services/api";
+import { api } from "../../api/api";
 import { 
   Plus, 
   Trash2, 

@@ -2,14 +2,14 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
-import Layout from "./components/Layout";
+import Layout from "./components/common/Layout";
 
 // Pages
-import Home from "./pages/Home";
-import Menu from "./pages/Menu";
-import Cart from "./pages/Cart";
-import OrderTracking from "./pages/OrderTracking";
-import Login from "./pages/Login";
+import Home from "./pages/customer/Home";
+import Menu from "./pages/customer/Menu";
+import Cart from "./pages/customer/Cart";
+import OrderTracking from "./pages/customer/OrderTracking";
+import Login from "./pages/customer/Login";
 
 // Admin & Manager
 import AdminLayout from "./pages/admin/AdminLayout";

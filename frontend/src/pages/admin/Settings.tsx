@@ -5,7 +5,7 @@ import {
   updateDoc,
   setDoc
 } from "firebase/firestore";
-import { db } from "../../firebase";
+import { db } from "../../api/firebase";
 import { GlobalSettings } from "../../types";
 import { 
   Settings as SettingsIcon, 

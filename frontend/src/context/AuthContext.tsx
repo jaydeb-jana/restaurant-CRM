@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { UserProfile } from "../types";
+import { api } from "../api/api";
 
 interface AuthContextType {
   user: any | null;
@@ -8,6 +9,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isManager: boolean;
   loginWithCredentials: (phone: string, password: string) => Promise<boolean>;
+  loginAsCustomer: (phone: string) => void;
   logout: () => void;
 }
 
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   isManager: false,
   loginWithCredentials: async () => false,
+  loginAsCustomer: () => {},
   logout: () => {},
 });
 
@@ -39,38 +42,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithCredentials = async (phone: string, password: string): Promise<boolean> => {
-    // Check for Admin credentials
-    if (phone === "787490719" && password === "Jaydb@123") {
-      const adminProfile: UserProfile = {
-        uid: "admin-787490719",
-        name: "Jay Admin",
-        email: "admin@spicekraft.com",
-        phone: "787490719",
-        role: "admin",
-        createdAt: new Date().toISOString()
-      };
-      setProfile(adminProfile);
-      localStorage.setItem("spicekraft_profile", JSON.stringify(adminProfile));
-      return true;
-    }
-    
-    // Check Database Users (Employees/Managers)
+    // Check Database Users (Admins/Employees/Managers)
     try {
-      const res = await fetch("/api/db/users");
-      const users = await res.json();
+      const users = await api.get("users");
       const user = users.find((u: any) => u.phone === phone && u.password === password);
       
       if (user) {
-        const employeeProfile: UserProfile = {
-          uid: user.id || `emp-${Date.now()}`,
+        const profile: UserProfile = {
+          uid: user.id || `user-${Date.now()}`,
           name: user.name,
           email: user.email || "",
           phone: user.phone,
           role: user.role,
           createdAt: user.createdAt || new Date().toISOString()
         };
-        setProfile(employeeProfile);
-        localStorage.setItem("spicekraft_profile", JSON.stringify(employeeProfile));
+        setProfile(profile);
+        localStorage.setItem("spicekraft_profile", JSON.stringify(profile));
         return true;
       }
     } catch (error) {
@@ -78,6 +65,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     return false;
+  };
+
+  const loginAsCustomer = (phone: string) => {
+    const customerProfile: UserProfile = {
+      uid: `customer-${Date.now()}`,
+      name: "Customer",
+      phone: phone,
+      role: "user",
+      createdAt: new Date().toISOString()
+    };
+    setProfile(customerProfile);
+    localStorage.setItem("spicekraft_profile", JSON.stringify(customerProfile));
   };
 
   const logout = () => {
@@ -96,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAdmin, 
       isManager,
       loginWithCredentials,
+      loginAsCustomer,
       logout
     }}>
       {children}

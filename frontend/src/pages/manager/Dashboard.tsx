@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Order, Table } from "../../types";
-import { api } from "../../services/api";
+import { api } from "../../api/api";
 import { 
   Clock, CheckCircle2, AlertCircle, ChefHat, 
   Utensils, Bell, Search, ArrowRight, TrendingUp, Users, DollarSign, QrCode, X, Download

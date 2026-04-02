@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Order, MenuItem, Table } from "../../types";
-import { formatCurrency } from "../../lib/utils";
-import { api } from "../../services/api";
+import { formatCurrency, cn } from "../../api/utils";
+import { api } from "../../api/api";
 import { 
   ShoppingBag, 
   Users, 
@@ -134,8 +134,5 @@ const AdminDashboard = () => {
     </div>
   );
 };
-
-// Helper for cn
-import { cn } from "../../lib/utils";
 
 export default AdminDashboard;

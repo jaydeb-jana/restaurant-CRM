@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { MenuItem, Category } from "../../types";
-import { formatCurrency } from "../../lib/utils";
-import { api } from "../../services/api";
+import { MenuItem, Category } from "../../types/index";
+import { formatCurrency } from "../../api/utils";
+import { api } from "../../api/api";
 import { 
   Plus, 
   Search, 
