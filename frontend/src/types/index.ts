@@ -1,5 +1,12 @@
 export type UserRole = "admin" | "manager" | "employee" | "user";
 
+export interface Customer {
+  id: string; // The uid
+  name: string;
+  phone: string;
+  createdAt: string;
+}
+
 export interface UserProfile {
   uid: string;
   name: string;

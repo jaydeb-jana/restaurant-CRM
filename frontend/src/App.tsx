@@ -31,6 +31,17 @@ const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role?: 
   return <>{children}</>;
 };
 
+const ProfilePage = () => {
+  const { profile } = useAuth();
+  return (
+    <div className="p-20 text-center">
+      <h1 className="text-2xl font-bold">Your Profile</h1>
+      <p className="mt-4">Phone: {profile?.phone || 'Loading...'}</p>
+      <p className="mt-2 text-gray-500">Order history and more features coming soon!</p>
+    </div>
+  );
+};
+
 export default function App() {
   return (
     <AuthProvider>
@@ -43,6 +54,7 @@ export default function App() {
               <Route path="cart" element={<Cart />} />
               <Route path="track/:orderId" element={<OrderTracking />} />
               <Route path="login" element={<Login />} />
+              <Route path="profile" element={<ProfilePage />} />
               <Route path="offers" element={<div className="p-20 text-center">Offers coming soon</div>} />
               <Route path="reservation" element={<div className="p-20 text-center">Reservations coming soon</div>} />
               <Route path="contact" element={<div className="p-20 text-center">Contact coming soon</div>} />

@@ -21,7 +21,7 @@ const Menu = () => {
           api.get("categories"),
           api.get("menuItems")
         ]);
-        setCategories(cats.map((c: any, i: number) => typeof c === 'string' ? { id: c.toLowerCase().replace(/\s+/g, '-'), name: c, order: i } : c));
+        setCategories(cats.map((c: any, i: number) => typeof c === 'string' ? { id: (c || "").toLowerCase().replace(/\s+/g, '-'), name: c, order: i } : c));
         setItems(menuItems);
       } catch (error) {
         console.error("Error fetching menu:", error);
@@ -34,7 +34,7 @@ const Menu = () => {
 
   const filteredItems = items.filter(item => {
     const matchesCategory = activeCategory === "all" || item.categoryId === activeCategory;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (item?.name || "").toLowerCase().includes((searchQuery || "").toLowerCase());
     return matchesCategory && matchesSearch;
   });
 

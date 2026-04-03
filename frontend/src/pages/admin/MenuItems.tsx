@@ -114,8 +114,8 @@ const AdminMenuItems = () => {
   };
 
   const filteredItems = menuItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
-                         item.description.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (item?.name || "").toLowerCase().includes((search || "").toLowerCase()) || 
+                         (item?.description || "").toLowerCase().includes((search || "").toLowerCase());
     const matchesCategory = selectedCategory === "all" || item.categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });

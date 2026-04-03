@@ -1,57 +1,70 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
+
 import { 
-  whatsappStatus, 
-  whatsappQR, 
-  whatsappClient, 
-  initWhatsApp, 
+  whatsappManager,
   formatPhoneForWhatsApp 
 } from "../config/whatsapp";
 
-export const getStatus = (req: Request, res: Response) => {
-  res.json({ 
-    status: whatsappStatus, 
-    qr: whatsappQR,
-    connected: whatsappStatus === "connected"
-  });
+export const getStatus = async (req: Request, res: Response) => {
+  const sessions = whatsappManager.getAllSessions();
+  const primarySessionId = whatsappManager.getPrimaryId();
+  res.json({ sessions, primaryId: primarySessionId });
 };
 
-export const connect = (req: Request, res: Response) => {
-  if (whatsappStatus === "disconnected") {
-    initWhatsApp();
-    res.json({ success: true, message: "Initializing WhatsApp connection..." });
-  } else {
-    res.json({ success: false, message: "WhatsApp is already connecting or connected." });
+export const setPrimary = async (req: Request, res: Response) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: "Session ID required" });
+  try {
+    await whatsappManager.setPrimary(id);
+    res.json({ success: true, primaryId: id });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to set primary session" });
+  }
+};
+
+export const connect = async (req: Request, res: Response) => {
+  const { id } = req.body;
+  const sessionId = id || "primary";
+  
+  try {
+    // If another session is already connected/connecting, it'll be handled by the manager
+    await whatsappManager.initSession(sessionId);
+    res.json({ success: true, message: `Initializing WhatsApp session ${sessionId}...` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 };
 
 export const disconnect = async (req: Request, res: Response) => {
-  if (whatsappClient) {
-    try {
-      await whatsappClient.logout();
-      await whatsappClient.destroy();
-      // Note: In real app we should reset globals here or wait for 'disconnected' event
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: "Failed to disconnect" });
-    }
-  } else {
+  const { id, delete: deletePersistently } = req.body;
+  const sessionId = id || "primary";
+  
+  try {
+    await whatsappManager.disconnect(sessionId, !!deletePersistently);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to disconnect session ${sessionId}` });
   }
 };
 
 export const sendTest = async (req: Request, res: Response) => {
-  const { phone, message } = req.body;
-  if (whatsappStatus !== "connected" || !whatsappClient) {
-    return res.status(400).json({ error: "WhatsApp not connected" });
+  const { phone, message, sessionId } = req.body;
+  const id = sessionId || "primary";
+  
+  const client = whatsappManager.getClient(id);
+  const session = whatsappManager.getSession(id);
+  
+  if (!client || !session || session.status !== "connected") {
+    return res.status(400).json({ error: `WhatsApp session ${id} not connected` });
   }
 
   try {
     const chatId = formatPhoneForWhatsApp(phone);
-    await whatsappClient.sendMessage(chatId, message);
+    await client.sendMessage(chatId, message);
     res.json({ success: true });
   } catch (err) {
-    console.error("Error sending WhatsApp message:", err);
+    console.error(`Error sending WhatsApp message from ${id}:`, err);
     res.status(500).json({ error: "Failed to send message" });
   }
 };
@@ -70,9 +83,14 @@ export const getCustomers = async (req: Request, res: Response) => {
 };
 
 export const bulkSend = async (req: Request, res: Response) => {
-  const { phones, message } = req.body;
-  if (whatsappStatus !== "connected" || !whatsappClient) {
-    return res.status(400).json({ error: "WhatsApp not connected" });
+  const { phones, message, sessionId } = req.body;
+  const id = sessionId || "primary";
+
+  const client = whatsappManager.getClient(id);
+  const session = whatsappManager.getSession(id);
+
+  if (!client || !session || session.status !== "connected") {
+    return res.status(400).json({ error: `WhatsApp session ${id} not connected` });
   }
   if (!phones || !Array.isArray(phones) || phones.length === 0) {
     return res.status(400).json({ error: "No phone numbers provided" });
@@ -83,7 +101,7 @@ export const bulkSend = async (req: Request, res: Response) => {
     for (const phone of phones) {
       try {
         const chatId = formatPhoneForWhatsApp(phone);
-        await (whatsappClient as any).sendMessage(chatId, message);
+        await client.sendMessage(chatId, message);
         results.push({ phone, status: "success" });
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err: any) {

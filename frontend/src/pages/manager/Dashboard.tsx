@@ -65,8 +65,8 @@ const ManagerDashboard = () => {
 
   const filteredOrders = orders.filter(order => {
     const matchesFilter = filter === "all" || order.status === filter;
-    const matchesSearch = order.id.toLowerCase().includes(search.toLowerCase()) || 
-                          order.tableId.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (order?.id || "").toLowerCase().includes((search || "").toLowerCase()) || 
+                          (order?.tableId || "").toLowerCase().includes((search || "").toLowerCase());
     return matchesFilter && matchesSearch;
   });
 

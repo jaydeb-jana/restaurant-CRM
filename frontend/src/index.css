@@ -10,12 +10,15 @@
 
 :root {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #F8F8F8;
+  background-color: #F8F9FA;
+  color: #1A1C1E;
 }
 
-h1, h2, h3, .font-serif {
-  font-family: 'Playfair Display', serif;
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.02em;
 }
+
 
 @keyframes float {
   0% { transform: translateY(0px) rotate(0deg); }

@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { 
-  whatsappStatus, 
-  whatsappClient, 
+  getPrimaryStatus, 
+  getPrimaryClient, 
   formatPhoneForWhatsApp 
 } from "../config/whatsapp";
 
@@ -11,11 +11,14 @@ export const sendOTP = async (req: Request, res: Response) => {
   const otp = "123456";
   console.log(`Sending OTP ${otp} to ${phone}`);
 
-  if (whatsappStatus === "connected" && whatsappClient) {
+  const status = getPrimaryStatus();
+  const client = getPrimaryClient();
+
+  if (status === "connected" && client) {
     try {
       const chatId = formatPhoneForWhatsApp(phone);
       const otpTemplate = `*Spice Kraft Restaurant*\n\nYour secure login OTP is: *${otp}*\n\nPlease do not share this code with anyone. Happy dining! 🍛`;
-      await whatsappClient.sendMessage(chatId, otpTemplate);
+      await client.sendMessage(chatId, otpTemplate);
       res.json({ success: true, message: "OTP sent via WhatsApp", otp }); 
     } catch (err) {
       res.json({ success: true, message: "OTP sent via WhatsApp (Simulated - real failed)", otp });

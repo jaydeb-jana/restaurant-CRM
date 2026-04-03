@@ -105,7 +105,7 @@ const Navbar = () => {
                     <div className="w-8 h-8 bg-gray-900 text-white rounded-full flex items-center justify-center">
                       <User className="w-4 h-4" />
                     </div>
-                    <span className="text-sm font-extrabold pr-2">{profile?.name || "User"}</span>
+                    <span className="text-sm font-extrabold pr-2">{profile?.name !== "Customer" && profile?.name ? profile.name : profile?.phone || "User"}</span>
                   </Link>
                   <button 
                     onClick={handleLogout}

@@ -39,24 +39,41 @@ export const api = {
     });
     return res.json();
   },
+
   whatsapp: {
     getStatus: async () => {
       const res = await fetch(`${API_BASE}/whatsapp/status`);
       return res.json();
     },
-    connect: async () => {
-      const res = await fetch(`${API_BASE}/whatsapp/connect`, { method: "POST" });
+    connect: async (id: string = "primary") => {
+      const res = await fetch(`${API_BASE}/whatsapp/connect`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
       return res.json();
     },
-    disconnect: async () => {
-      const res = await fetch(`${API_BASE}/whatsapp/disconnect`, { method: "POST" });
+    disconnect: async (id: string = "primary", deletePersistently: boolean = false) => {
+      const res = await fetch(`${API_BASE}/whatsapp/disconnect`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, delete: deletePersistently })
+      });
       return res.json();
     },
-    sendTest: async (phone: string, message: string) => {
+    setPrimary: async (id: string) => {
+       const res = await fetch(`${API_BASE}/whatsapp/set-primary`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      return res.json();
+    },
+    sendTest: async (phone: string, message: string, sessionId: string = "primary") => {
       const res = await fetch(`${API_BASE}/whatsapp/send-test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, message }),
+        body: JSON.stringify({ phone, message, sessionId }),
       });
       return res.json();
     },
@@ -64,11 +81,11 @@ export const api = {
       const res = await fetch(`${API_BASE}/whatsapp/customers`);
       return res.json();
     },
-    bulkSend: async (phones: string[], message: string) => {
+    bulkSend: async (phones: string[], message: string, sessionId: string = "primary") => {
       const res = await fetch(`${API_BASE}/whatsapp/bulk-send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phones, message }),
+        body: JSON.stringify({ phones, message, sessionId }),
       });
       return res.json();
     }

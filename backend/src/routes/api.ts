@@ -23,6 +23,7 @@ router.put("/settings", dbController.updateSettings);
 // WhatsApp Routes
 router.get("/whatsapp/status", whatsappController.getStatus);
 router.post("/whatsapp/connect", whatsappController.connect);
+router.post("/whatsapp/set-primary", whatsappController.setPrimary);
 router.post("/whatsapp/disconnect", whatsappController.disconnect);
 router.post("/whatsapp/send-test", whatsappController.sendTest);
 router.get("/whatsapp/customers", whatsappController.getCustomers);

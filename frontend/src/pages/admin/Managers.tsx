@@ -96,8 +96,8 @@ const AdminManagers = () => {
   };
 
   const filteredManagers = managers.filter(m => 
-    m.name.toLowerCase().includes(search.toLowerCase()) || 
-    m.email?.toLowerCase().includes(search.toLowerCase())
+    (m?.name || "").toLowerCase().includes((search || "").toLowerCase()) || 
+    (m?.email || "").toLowerCase().includes((search || "").toLowerCase())
   );
 
   if (loading) {
