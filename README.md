@@ -9,8 +9,8 @@ A complete automation solution designed to digitize and manage restaurant operat
 - **Table Management:** Automated table booking and status updates.
 
 ### 🛠️ Tech Stack:
-- **Frontend:** React / Next.js
-- **Backend:** Node.js, Express
+- **Frontend:** React / TypeScript / Framer Motion
+- **Backend:** Express / TypeScript
 - **Database:** MongoDB
 - **Styling:** Tailwind CSS
 
