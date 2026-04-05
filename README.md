@@ -10,7 +10,7 @@ A complete automation solution designed to digitize and manage restaurant operat
 
 ### 🛠️ Tech Stack:
 - **Frontend:** React / TypeScript / Framer Motion
-- **Backend:** Express / TypeScript
+- **Backend:** Express js / TypeScript
 - **Database:** MongoDB
 - **Styling:** Tailwind CSS
 
