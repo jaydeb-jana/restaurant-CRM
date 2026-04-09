@@ -1,28 +1,4 @@
-# 🍽️ Restaurant Management CRM
-
-A complete automation solution designed to digitize and manage restaurant operations efficiently.
-
-### ✨ Key Features:
-- **Automated Ordering:** Streamlined process for customer orders.
-- **Real-time Tracking:** Instant updates on order status.
-- **Admin Dashboard:** Manage menus and view sales reports easily.
-- **Table Management:** Automated table booking and status updates.
-
-### 🛠️ Tech Stack:
-- **Frontend:** React / TypeScript / Framer Motion
-- **Backend:** Express js / TypeScript
-- **Database:** MongoDB
-- **Styling:** Tailwind CSS
-
----
-**Developed by [Jaydeb Jana](https://github.com/jaydeb-jana)**
-
-
-
-
-
-
-
+future features
 
 # 💳 Arventa Ventures: Payment & Sound Automation
 
@@ -55,4 +31,3 @@ Our system ensures that every transaction—whether online or offline—is track
 * **Hardware:** Amazon Basics Multimedia Speakers
 
 ---
-© 2026 Arventa Ventures. All rights reserved.
