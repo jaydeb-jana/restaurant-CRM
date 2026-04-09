@@ -1,4 +1,4 @@
-# 🍽️ Restaurant Automation System
+# 🍽️ Restaurant Management CRM
 
 A complete automation solution designed to digitize and manage restaurant operations efficiently.
 
