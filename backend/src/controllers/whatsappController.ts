@@ -3,13 +3,27 @@ import mongoose from "mongoose";
 
 import { 
   whatsappManager,
-  formatPhoneForWhatsApp 
+  formatPhoneForWhatsApp,
+  MessageMedia
 } from "../config/whatsapp";
 
 export const getStatus = async (req: Request, res: Response) => {
   const sessions = whatsappManager.getAllSessions();
   const primarySessionId = whatsappManager.getPrimaryId();
   res.json({ sessions, primaryId: primarySessionId });
+};
+
+export const requestPairingCode = async (req: Request, res: Response) => {
+  const { id, phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Phone number is required." });
+  const sessionId = id || "primary";
+
+  try {
+    const code = await whatsappManager.requestPairingCode(sessionId, phone);
+    res.json({ success: true, code });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to generate pairing code." });
+  }
 };
 
 export const setPrimary = async (req: Request, res: Response) => {
@@ -49,7 +63,7 @@ export const disconnect = async (req: Request, res: Response) => {
 };
 
 export const sendTest = async (req: Request, res: Response) => {
-  const { phone, message, sessionId } = req.body;
+  const { phone, message, sessionId, media } = req.body;
   const id = sessionId || "primary";
   
   const client = whatsappManager.getClient(id);
@@ -61,7 +75,12 @@ export const sendTest = async (req: Request, res: Response) => {
 
   try {
     const chatId = formatPhoneForWhatsApp(phone);
-    await client.sendMessage(chatId, message);
+    if (media && media.data) {
+        const messageMedia = new MessageMedia(media.mimetype, media.data, media.filename);
+        await client.sendMessage(chatId, messageMedia, { caption: message });
+    } else {
+        await client.sendMessage(chatId, message);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error(`Error sending WhatsApp message from ${id}:`, err);
@@ -83,7 +102,7 @@ export const getCustomers = async (req: Request, res: Response) => {
 };
 
 export const bulkSend = async (req: Request, res: Response) => {
-  const { phones, message, sessionId } = req.body;
+  const { phones, message, sessionId, media, delay } = req.body;
   const id = sessionId || "primary";
 
   const client = whatsappManager.getClient(id);
@@ -98,15 +117,25 @@ export const bulkSend = async (req: Request, res: Response) => {
 
   try {
     const results = [];
+    const messageMedia = (media && media.data) 
+        ? new MessageMedia(media.mimetype, media.data, media.filename)
+        : null;
+
     for (const phone of phones) {
       try {
         const chatId = formatPhoneForWhatsApp(phone);
-        await client.sendMessage(chatId, message);
+        if (messageMedia) {
+            await client.sendMessage(chatId, messageMedia, { caption: message });
+        } else {
+            await client.sendMessage(chatId, message);
+        }
         results.push({ phone, status: "success" });
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (err: any) {
-        results.push({ phone, status: "failed", error: err.message });
+      } catch (e: any) {
+        results.push({ phone, status: "failed", error: e.message });
       }
+      
+      const delayMs = delay ? Number(delay) : 1000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
     res.json({ success: true, results });
   } catch (err) {

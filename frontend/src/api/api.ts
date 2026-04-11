@@ -69,11 +69,11 @@ export const api = {
       });
       return res.json();
     },
-    sendTest: async (phone: string, message: string, sessionId: string = "primary") => {
+    sendTest: async (phone: string, message: string, sessionId: string = "primary", media?: any) => {
       const res = await fetch(`${API_BASE}/whatsapp/send-test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, message, sessionId }),
+        body: JSON.stringify({ phone, message, sessionId, media }),
       });
       return res.json();
     },
@@ -81,11 +81,19 @@ export const api = {
       const res = await fetch(`${API_BASE}/whatsapp/customers`);
       return res.json();
     },
-    bulkSend: async (phones: string[], message: string, sessionId: string = "primary") => {
+    bulkSend: async (phones: string[], message: string, sessionId: string = "primary", media?: any, delay?: number) => {
       const res = await fetch(`${API_BASE}/whatsapp/bulk-send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phones, message, sessionId }),
+        body: JSON.stringify({ phones, message, sessionId, media, delay }),
+      });
+      return res.json();
+    },
+    requestPairingCode: async (sessionId: string, phone: string) => {
+      const res = await fetch(`${API_BASE}/whatsapp/pairing-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: sessionId, phone }),
       });
       return res.json();
     }

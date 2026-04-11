@@ -1,12 +1,18 @@
 import * as WWebJS from "whatsapp-web.js";
 const { Client, LocalAuth } = (WWebJS as any).default || WWebJS;
+export const { MessageMedia } = (WWebJS as any).default || WWebJS;
 import type { Client as ClientType } from "whatsapp-web.js";
 import qrcode from "qrcode";
 import mongoose from "mongoose";
 
-// Helper for formatting WhatsApp numbers explicitly for India if 10 digits
+// Helper for formatting WhatsApp numbers
 export const formatPhoneForWhatsApp = (phone: string) => {
   let cleaned = phone.replace(/\D/g, "");
+  // If it starts with 91 and has 12 digits, it's already full
+  if (cleaned.length === 12 && cleaned.startsWith("91")) {
+      return `${cleaned}@c.us`;
+  }
+  // If 10 digits, add 91
   if (cleaned.length === 10) cleaned = "91" + cleaned;
   return `${cleaned}@c.us`;
 };
@@ -78,7 +84,10 @@ class WhatsAppSessionManager {
     }
 
     if (this.clients.has(id)) return;
+    if (this.statuses.get(id)?.status === "connecting") return;
     if (this.clients.size >= 10) throw new Error("Maximum 10 WhatsApp sessions allowed.");
+
+    this.updateStatus(id, { id, status: "connecting", qr: null, me: null });
 
     const client = new Client({
       authStrategy: new LocalAuth({ clientId: id }),
@@ -91,8 +100,6 @@ class WhatsAppSessionManager {
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
       }
     });
-
-    this.updateStatus(id, { id, status: "connecting", qr: null, me: null });
 
     client.on("qr", async (qr) => {
       console.log(`WhatsApp QR Received for session: ${id}`);
@@ -182,7 +189,30 @@ class WhatsAppSessionManager {
   }
 
   public getAllSessions() {
-    return Array.from(this.statuses.values());
+    // Filter out sessions that are disconnected AND have never been linked (no 'me' info)
+    // UNLESS it's the primary session or it's currently 'connecting'
+    return Array.from(this.statuses.values()).filter(s => {
+      if (s.status === "connected" || s.status === "connecting") return true;
+      if (s.me) return true; // Keep history of linked but currently disconnected numbers
+      if (s.id === this.primarySessionId) return true; // Keep primary
+      return false; // Remove failed/unlinked temporary sessions
+    });
+  }
+
+  public async requestPairingCode(id: string, phone: string): Promise<string> {
+    const client = this.clients.get(id);
+    if (!client) throw new Error("Session is not ready. Please try connecting again.");
+
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone) throw new Error("Invalid phone number format.");
+
+    try {
+      const code = await (client as any).requestPairingCode(cleanPhone);
+      return code;
+    } catch (err: any) {
+      console.error("Error requesting pairing code:", err);
+      throw new Error(err.message || "Failed to generate pairing code.");
+    }
   }
 
   public getClient(id: string) {
