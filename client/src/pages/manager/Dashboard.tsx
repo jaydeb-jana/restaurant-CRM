@@ -6,7 +6,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import QRCode from "qrcode";
 import { useBranding } from "../../config/branding";
-import { useOrders } from "@hooks/useOrders";
+import { useOrders } from "../../hooks/useOrders";
+
 
 import { Order, Table } from "@types/index";
 
