@@ -4,7 +4,7 @@ import getBranding from "../config/branding";
 
 import { 
   getPrimaryStatus, 
-  getPrimaryClient, 
+  getPrimarySocket as getPrimaryClient, 
   formatPhoneForWhatsApp 
 } from "../config/whatsapp";
 
@@ -14,15 +14,15 @@ export const sendOTP = async (req: Request, res: Response) => {
   console.log(`Sending OTP ${otp} to ${phone}`);
 
   const status = getPrimaryStatus();
-  const client = getPrimaryClient();
+  const socket = getPrimaryClient();
 
-  if (status === "connected" && client) {
+  if (status === "connected" && socket) {
     try {
       const chatId = formatPhoneForWhatsApp(phone);
       const branding = getBranding();
       const otpTemplate = `*${branding.name}*\n\nYour secure login OTP is: *${otp}*\n\nPlease do not share this code with anyone. Happy dining! 🍛`;
 
-      await client.sendMessage(chatId, otpTemplate);
+      await socket.sendMessage(chatId, { text: otpTemplate });
       res.json({ success: true, message: "OTP sent via WhatsApp", otp }); 
     } catch (err) {
       res.json({ success: true, message: "OTP sent via WhatsApp (Simulated - real failed)", otp });

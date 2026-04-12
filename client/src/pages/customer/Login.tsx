@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { motion } from "motion/react";
-import { Phone, MessageSquare, ArrowRight, ShieldCheck, Lock, AlertCircle } from "lucide-react";
+import { Phone, MessageSquare, ArrowRight, ShieldCheck, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { api } from "../../api/api";
 
 const Login = () => {
@@ -11,6 +11,7 @@ const Login = () => {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp" | "admin">("phone");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { loginWithCredentials, loginAsCustomer } = useAuth();
   const navigate = useNavigate();
@@ -31,14 +32,17 @@ const Login = () => {
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone) return;
+    setError(null);
     setLoading(true);
     try {
       const res = await api.auth.sendOTP(phone);
       if (res.success) {
         setStep("otp");
+      } else {
+        setError(res.message || "Failed to send OTP");
       }
     } catch (error) {
-      console.error("OTP Error:", error);
+      setError("Connection error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -46,6 +50,7 @@ const Login = () => {
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
     try {
       const res = await api.auth.verifyOTP(phone, otp);
@@ -53,39 +58,46 @@ const Login = () => {
         loginAsCustomer(phone);
         navigate("/");
       } else {
-        alert("Verification failed");
+        setError("Invalid OTP code. Please check and try again.");
       }
     } catch (err) {
-      alert("Error verifying OTP");
+      setError("Verification service error.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-12 md:py-24">
-      <div className="bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-10 shadow-2xl border border-gray-50">
-        <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <MessageSquare className="text-[#FC8019] w-8 h-8" />
+    <div className="flex items-center justify-center px-4 py-4 sm:py-8 md:py-16 min-h-[70vh]">
+      <div className="w-full max-w-md bg-white rounded-3xl sm:rounded-[3rem] p-5 sm:p-10 shadow-2xl border border-gray-50 overflow-hidden">
+        <div className="text-center mb-6 sm:mb-10">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6">
+            <MessageSquare className="text-[#FC8019] w-6 h-6 sm:w-8 sm:h-8" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-          <p className="text-[#686B78]">Login to track your orders and more.</p>
+          <h1 className="text-xl sm:text-3xl font-bold mb-1 sm:mb-2 text-[#1C1C1C]">Welcome Back</h1>
+          <p className="text-xs sm:text-sm text-[#686B78]">Login to track your orders and more.</p>
         </div>
 
-        <div className="space-y-6">
+        {error && (
+          <div className="mb-6 p-3 sm:p-4 bg-red-50 text-red-500 text-[10px] sm:text-xs font-bold rounded-xl flex items-center space-x-2 border border-red-100 animate-in slide-in-from-top-2">
+            <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="space-y-4 sm:space-y-6">
           {step === "phone" ? (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1C1C1C] ml-1">WhatsApp Number</label>
+            <form onSubmit={handleSendOTP} className="space-y-3 sm:space-y-4">
+              <div className="space-y-1 sm:space-y-2">
+                <label className="text-[10px] sm:text-sm font-bold text-[#1C1C1C] ml-1 uppercase tracking-wider">WhatsApp Number</label>
                 <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                   <input
                     type="tel"
                     placeholder="+91 98765 43210"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium"
+                    className="w-full pl-11 sm:pl-12 pr-4 py-3 sm:py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium text-sm sm:text-base outline-none"
                     required
                   />
                 </div>
@@ -93,29 +105,29 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#FC8019] text-white py-4 rounded-2xl font-bold hover:bg-[#FF5200] transition-all shadow-lg shadow-orange-100 flex items-center justify-center space-x-2"
+                className="w-full bg-[#FC8019] text-white py-3.5 sm:py-4 rounded-2xl font-bold hover:bg-[#FF5200] transition-all shadow-lg shadow-orange-100 flex items-center justify-center space-x-2 active:scale-[0.98]"
               >
-                <span>{loading ? "Sending..." : "Send OTP via WhatsApp"}</span>
-                <ArrowRight className="w-5 h-5" />
+                <span className="text-sm sm:text-base">{loading ? "Sending..." : "Send OTP via WhatsApp"}</span>
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
               <button 
                 type="button"
                 onClick={() => setStep("admin")}
-                className="w-full text-sm text-[#FC8019] font-bold hover:underline"
+                className="w-full text-xs sm:text-sm text-[#FC8019] font-bold hover:underline"
               >
                 Login as Staff/Admin
               </button>
             </form>
           ) : step === "otp" ? (
-            <form onSubmit={handleVerifyOTP} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1C1C1C] ml-1">Enter OTP</label>
+            <form onSubmit={handleVerifyOTP} className="space-y-3 sm:space-y-4">
+              <div className="space-y-1 sm:space-y-2">
+                <label className="text-[10px] sm:text-sm font-bold text-[#1C1C1C] ml-1 uppercase tracking-wider">Enter OTP</label>
                 <input
                   type="text"
                   placeholder="Enter 6-digit code"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-mono text-center text-2xl tracking-[0.5em] font-bold"
+                  className="w-full px-6 py-3 sm:py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-mono text-center text-lg sm:text-2xl tracking-[0.5em] font-bold outline-none"
                   maxLength={6}
                   required
                 />
@@ -123,65 +135,67 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#FC8019] text-white py-4 rounded-2xl font-bold hover:bg-[#FF5200] transition-all shadow-lg shadow-orange-100"
+                className="w-full bg-[#FC8019] text-white py-3.5 sm:py-4 rounded-2xl font-bold hover:bg-[#FF5200] transition-all shadow-lg shadow-orange-100 active:scale-[0.98]"
               >
-                {loading ? "Verifying..." : "Verify & Login"}
+                <span className="text-sm sm:text-base">{loading ? "Verifying..." : "Verify & Login"}</span>
               </button>
               <button 
                 type="button"
                 onClick={() => setStep("phone")}
-                className="w-full text-sm text-[#686B78] font-medium hover:text-[#FC8019]"
+                className="w-full text-xs sm:text-sm text-[#686B78] font-medium hover:text-[#FC8019]"
               >
                 Change Phone Number
               </button>
             </form>
           ) : (
-            <form onSubmit={handleAdminLogin} className="space-y-4">
-              {error && (
-                <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-xl flex items-center space-x-2">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{error}</span>
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1C1C1C] ml-1">Staff / Admin Mobile Number</label>
+            <form onSubmit={handleAdminLogin} className="space-y-3 sm:space-y-4">
+              <div className="space-y-1 sm:space-y-2">
+                <label className="text-[10px] sm:text-sm font-bold text-[#1C1C1C] ml-1 uppercase tracking-wider">Staff / Admin Mobile Number</label>
                 <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                   <input
                     type="tel"
                     placeholder="Enter registered mobile number"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium"
+                    className="w-full pl-11 sm:pl-12 pr-4 py-3 sm:py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium text-sm sm:text-base outline-none"
                     required
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1C1C1C] ml-1">Password</label>
+              <div className="space-y-1 sm:space-y-2">
+                <label className="text-[10px] sm:text-sm font-bold text-[#1C1C1C] ml-1 uppercase tracking-wider">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium"
+                    className="w-full pl-11 sm:pl-12 pr-11 sm:pr-12 py-3 sm:py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-orange-100 transition-all font-medium text-sm sm:text-base outline-none"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </button>
                 </div>
               </div>
               <button
                 type="submit"
-                className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold hover:bg-black transition-all shadow-lg shadow-black/10 flex items-center justify-center space-x-2"
+                disabled={loading}
+                className="w-full bg-gray-900 text-white py-3.5 sm:py-4 rounded-2xl font-bold hover:bg-black transition-all shadow-lg shadow-black/10 flex items-center justify-center space-x-2 active:scale-[0.98]"
               >
-                <ShieldCheck className="w-5 h-5 text-[#FC8019]" />
-                <span>Staff / Admin Login</span>
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-[#FC8019]" />
+                <span className="text-sm sm:text-base">{loading ? "Authenticating..." : "Staff / Admin Login"}</span>
               </button>
               <button 
                 type="button"
                 onClick={() => setStep("phone")}
-                className="w-full text-sm text-[#686B78] font-medium hover:text-[#FC8019]"
+                className="w-full text-xs sm:text-sm text-[#686B78] font-medium hover:text-[#FC8019]"
               >
                 Back to Customer Login
               </button>

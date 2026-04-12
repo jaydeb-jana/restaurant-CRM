@@ -1,4 +1,4 @@
-import { whatsappManager, formatPhoneForWhatsApp, MessageMedia } from "../config/whatsapp";
+import { whatsappManager, formatPhoneForWhatsApp } from "../config/whatsapp";
 import mongoose from "mongoose";
 
 export class WhatsAppService {
@@ -14,51 +14,69 @@ export class WhatsAppService {
 
   static async sendTestMessage(phone: string, message: string, sessionId: string, media?: any) {
     const id = sessionId || "primary";
-    const client = whatsappManager.getClient(id);
+    const socket = whatsappManager.getSocket(id);
     const session = whatsappManager.getSession(id);
 
-    if (!client || !session || session.status !== "connected") {
+    if (!socket || !session || session.status !== "connected") {
       throw new Error(`WhatsApp session ${id} not connected`);
     }
 
     const chatId = formatPhoneForWhatsApp(phone);
+    
     if (media && media.data) {
-      const messageMedia = new MessageMedia(media.mimetype, media.data, media.filename);
-      await client.sendMessage(chatId, messageMedia, { caption: message });
+      const buffer = Buffer.from(media.data, "base64");
+      const type = media.mimetype.split('/')[0];
+      
+      let messageContent: any = {};
+      if (type === "image") messageContent = { image: buffer, caption: message };
+      else if (type === "video") messageContent = { video: buffer, caption: message };
+      else if (type === "audio") messageContent = { audio: buffer, caption: message };
+      else messageContent = { document: buffer, mimetype: media.mimetype, fileName: media.filename || "file", caption: message };
+
+      await socket.sendMessage(chatId, messageContent);
     } else {
-      await client.sendMessage(chatId, message);
+      await socket.sendMessage(chatId, { text: message });
     }
     return { success: true };
   }
 
-  static async bulkSend(phones: string[], message: string, sessionId: string, media?: any, delay: number = 1000) {
+  static async bulkSend(phones: string[], message: string, sessionId: string, media?: any, delayMs: number = 1000) {
     const id = sessionId || "primary";
-    const client = whatsappManager.getClient(id);
+    const socket = whatsappManager.getSocket(id);
     const session = whatsappManager.getSession(id);
 
-    if (!client || !session || session.status !== "connected") {
+    if (!socket || !session || session.status !== "connected") {
       throw new Error(`WhatsApp session ${id} not connected`);
     }
 
     const results = [];
-    const messageMedia = (media && media.data) 
-      ? new MessageMedia(media.mimetype, media.data, media.filename)
-      : null;
+    let mediaContent: any = null;
+
+    if (media && media.data) {
+      const buffer = Buffer.from(media.data, "base64");
+      const type = media.mimetype.split('/')[0];
+      if (type === "image") mediaContent = { image: buffer, caption: message };
+      else if (type === "video") mediaContent = { video: buffer, caption: message };
+      else if (type === "audio") mediaContent = { audio: buffer, caption: message };
+      else mediaContent = { document: buffer, mimetype: media.mimetype, fileName: media.filename || "file", caption: message };
+    }
 
     for (const phone of phones) {
       try {
         const chatId = formatPhoneForWhatsApp(phone);
-        if (messageMedia) {
-          await client.sendMessage(chatId, messageMedia, { caption: message });
+        if (mediaContent) {
+          await socket.sendMessage(chatId, mediaContent);
         } else {
-          await client.sendMessage(chatId, message);
+          await socket.sendMessage(chatId, { text: message });
         }
         results.push({ phone, status: "success" });
       } catch (e: any) {
         results.push({ phone, status: "failed", error: e.message });
       }
       
-      await new Promise(resolve => setTimeout(resolve, delay));
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }
     return results;
   }

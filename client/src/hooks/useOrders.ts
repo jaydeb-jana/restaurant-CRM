@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axiosInstance from '@api/axiosInstance';
-import { Order } from '@types/index';
+import { Order } from '@/types';
 
 export const useOrders = () => {
   const queryClient = useQueryClient();
@@ -8,7 +8,7 @@ export const useOrders = () => {
   const ordersQuery = useQuery<Order[]>({
     queryKey: ['orders'],
     queryFn: async () => {
-      const response = await axiosInstance.get('/db/orders');
+      const response = await axiosInstance.get('/db/orders') as any;
       return response.filter((o: any) => 
         ["pending", "preparing", "ready", "served"].includes(o.status)
       ).sort((a: any, b: any) => 

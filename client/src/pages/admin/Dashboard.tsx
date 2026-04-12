@@ -44,24 +44,51 @@ const filters = [
   { label: "Last 6 Months", value: 180 * 24 * 60 * 60 * 1000 },
   { label: "Last 12 Months", value: 365 * 24 * 60 * 60 * 1000 },
   { label: "Last 2 Years", value: 730 * 24 * 60 * 60 * 1000 },
+  { label: "Custom Range", value: -1 },
 ];
 
-const ProfessionalDropdown = ({ selected, onSelect, options }: any) => {
+const ProfessionalDropdown = ({ selected, onSelect, options, customStart, customEnd, onCustomStartChange, onCustomEndChange }: any) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-3 bg-white px-5 py-3 rounded-xl border border-gray-200 hover:border-orange-500 shadow-sm transition-all group h-full"
-      >
-        <Calendar className="w-5 h-5 text-gray-500" />
-        <div className="text-left font-medium">
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Time Range</p>
-          <p className="text-sm text-gray-900">{selected.label}</p>
-        </div>
-        <ChevronDown className={cn("w-5 h-5 text-gray-400 transition-transform duration-300", isOpen && "rotate-180")} />
-      </button>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center space-x-3 bg-white px-5 py-3 rounded-xl border border-gray-200 hover:border-orange-500 shadow-sm transition-all group h-full whitespace-nowrap"
+        >
+          <Calendar className="w-5 h-5 text-gray-500" />
+          <div className="text-left font-medium">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Time Range</p>
+            <p className="text-sm text-gray-900">{selected.label}</p>
+          </div>
+          <ChevronDown className={cn("w-5 h-5 text-gray-400 transition-transform duration-300", isOpen && "rotate-180")} />
+        </button>
+
+        {selected.value === -1 && (
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm overflow-x-auto scrollbar-hide">
+            <div className="flex flex-col">
+              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Start</span>
+              <input 
+                type="date" 
+                value={customStart}
+                onChange={(e) => onCustomStartChange(e.target.value)}
+                className="text-xs font-bold text-gray-900 focus:outline-none border-none p-0 bg-transparent"
+              />
+            </div>
+            <div className="w-px h-6 bg-gray-100 mx-1" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">End</span>
+              <input 
+                type="date" 
+                value={customEnd}
+                onChange={(e) => onCustomEndChange(e.target.value)}
+                className="text-xs font-bold text-gray-900 focus:outline-none border-none p-0 bg-transparent"
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       <AnimatePresence>
         {isOpen && (
@@ -71,7 +98,7 @@ const ProfessionalDropdown = ({ selected, onSelect, options }: any) => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-100 shadow-xl p-2 z-50"
+              className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-100 shadow-xl p-2 z-50 max-h-[400px] overflow-y-auto scrollbar-hide"
             >
               <div className="flex flex-col">
                 {options.map((opt: any) => (
@@ -197,6 +224,8 @@ const AdminDashboard = () => {
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedFilter, setSelectedFilter] = useState(filters[2]);
+  const [customStartDate, setCustomStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customEndDate, setCustomEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -222,28 +251,55 @@ const AdminDashboard = () => {
   }, []);
 
   const filteredOrders = useMemo(() => {
-    const cutoff = Date.now() - selectedFilter.value;
+    let cutoff = Date.now() - selectedFilter.value;
+    let customStart = 0;
+    let customEnd = Infinity;
+
+    if (selectedFilter.value === -1) {
+      customStart = customStartDate ? new Date(customStartDate).getTime() : 0;
+      customEnd = customEndDate ? new Date(customEndDate).getTime() + (24 * 60 * 60 * 1000) - 1 : Infinity;
+    }
+
     return allOrders
       .filter(o => {
-        const matchesTime = new Date(o.createdAt).getTime() >= cutoff;
+        const time = new Date(o.createdAt).getTime();
+        const matchesTime = selectedFilter.value === -1 
+          ? (time >= customStart && time <= customEnd)
+          : (time >= cutoff);
         const matchesCustomer = !selectedCustomer || o.userId === selectedCustomer.id;
         return matchesTime && matchesCustomer;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [allOrders, selectedFilter, selectedCustomer]);
+  }, [allOrders, selectedFilter, selectedCustomer, customStartDate, customEndDate]);
 
   const stats = useMemo(() => {
     const total = filteredOrders.length;
     const active = filteredOrders.filter((o: any) => !["completed", "cancelled", "rejected"].includes(o.status)).length;
     const rev = filteredOrders.reduce((sum: number, o: any) => sum + o.total, 0);
     
-    const prevCutoff = Date.now() - (selectedFilter.value * 2);
-    const prevOrders = allOrders.filter(o => {
-      const t = new Date(o.createdAt).getTime();
-      const matchesTime = t >= prevCutoff && t < (Date.now() - selectedFilter.value);
-      const matchesCustomer = !selectedCustomer || o.userId === selectedCustomer.id;
-      return matchesTime && matchesCustomer;
-    });
+    let prevOrders: Order[] = [];
+    if (selectedFilter.value !== -1) {
+      const prevCutoff = Date.now() - (selectedFilter.value * 2);
+      prevOrders = allOrders.filter(o => {
+        const t = new Date(o.createdAt).getTime();
+        const matchesTime = t >= prevCutoff && t < (Date.now() - selectedFilter.value);
+        const matchesCustomer = !selectedCustomer || o.userId === selectedCustomer.id;
+        return matchesTime && matchesCustomer;
+      });
+    } else {
+      // For custom range, just compare with the same duration before the start date
+      const start = new Date(customStartDate).getTime();
+      const end = new Date(customEndDate).getTime() + (24 * 60 * 60 * 1000) - 1;
+      const duration = end - start;
+      const prevStart = start - duration;
+      const prevEnd = start - 1;
+      prevOrders = allOrders.filter(o => {
+        const t = new Date(o.createdAt).getTime();
+        const matchesTime = t >= prevStart && t <= prevEnd;
+        const matchesCustomer = !selectedCustomer || o.userId === selectedCustomer.id;
+        return matchesTime && matchesCustomer;
+      });
+    }
     
     const prevRev = prevOrders.reduce((sum: number, o: any) => sum + o.total, 0);
     const revTrend = prevRev === 0 ? "+100%" : `${(((rev - prevRev) / prevRev) * 100).toFixed(1)}%`;
@@ -256,16 +312,25 @@ const AdminDashboard = () => {
       revTrend,
       isRevUp: rev >= prevRev
     };
-  }, [filteredOrders, allOrders, selectedFilter]);
+  }, [filteredOrders, allOrders, selectedFilter, customStartDate, customEndDate, selectedCustomer]);
 
   const chartData = useMemo(() => {
-    const points = 15; // Increased points for smoother graph
-    const interval = selectedFilter.value / points;
-    const now = Date.now();
+    const points = 15; 
+    let duration = selectedFilter.value;
+    let endTS = Date.now();
+    let startTS = endTS - duration;
+
+    if (selectedFilter.value === -1) {
+      startTS = customStartDate ? new Date(customStartDate).getTime() : 0;
+      endTS = customEndDate ? new Date(customEndDate).getTime() + (24 * 60 * 60 * 1000) - 1 : Date.now();
+      duration = endTS - startTS;
+    }
+
+    const interval = duration / points;
     
     return Array.from({ length: points + 1 }).map((_, i) => {
-      const start = now - (points - i) * interval;
-      const end = now - (points - i - 1) * interval;
+      const start = startTS + (i * interval);
+      const end = start + interval;
       const pointOrders = allOrders.filter(o => {
         const t = new Date(o.createdAt).getTime();
         const matchesTime = t >= start && t < end;
@@ -273,13 +338,19 @@ const AdminDashboard = () => {
         return matchesTime && matchesCustomer;
       });
       const totals = pointOrders.reduce((sum, o) => sum + o.total, 0);
+      
+      const dateObj = new Date(start);
+      const label = duration > 24 * 60 * 60 * 1000 
+        ? dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })
+        : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
       return {
-        timestamp: new Date(start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: label,
         sales: totals,
         rawTime: start
       };
     });
-  }, [allOrders, selectedFilter]);
+  }, [allOrders, selectedFilter, customStartDate, customEndDate, selectedCustomer]);
 
   const exportCSV = () => {
     const headers = ["Date", "Order ID", "Table", "Status", "Payment", "Items", "Total"];
@@ -358,6 +429,10 @@ const AdminDashboard = () => {
               selected={selectedFilter} 
               onSelect={setSelectedFilter} 
               options={filters} 
+              customStart={customStartDate}
+              customEnd={customEndDate}
+              onCustomStartChange={setCustomStartDate}
+              onCustomEndChange={setCustomEndDate}
             />
           </div>
         </div>

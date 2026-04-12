@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useBranding } from "../../config/branding";
-
 import {
   MessageSquare, QrCode, CheckCircle2, RefreshCw, Send, Loader2, XCircle,
-  Users, CheckSquare, Square, Smartphone, Plus, Trash2, Power, LayoutGrid,
-  Settings as SettingsIcon, AlertCircle, Phone, Paperclip, ImageIcon, FileText, X
+  Users, CheckSquare, Smartphone, Plus, Trash2, Power, LayoutGrid,
+  Settings as SettingsIcon, AlertCircle, Phone, Paperclip, ImageIcon, FileText, X,
+  Trash, ChevronRight, Zap, Globe, Lock, ShieldAlert, Activity, ShieldCheck,
+  Shield, Cog, Share2, MoreHorizontal, ArrowRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../api/utils";
 import { api } from "../../api/api";
+import "./WhatsAppManagement.css";
 
 interface WhatsAppSession {
   id: string;
@@ -20,154 +22,148 @@ interface WhatsAppSession {
   } | null;
 }
 
+const ProfessionalQRCode = ({ data }: { data: string }) => {
+  const qrRef = React.useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  React.useEffect(() => {
+    if (!qrRef.current || !data) return;
+    let isMounted = true;
+    setIsReady(false);
+    
+    import('qr-code-styling').then((Module) => {
+      if (!isMounted || !qrRef.current) return;
+      const QRCodeStyling = Module.default;
+
+      try {
+        const qrCode = new QRCodeStyling({
+          width: 280,
+          height: 280,
+          type: 'svg',
+          data: data,
+          dotsOptions: { color: "#0F172A", type: "rounded" },
+          backgroundOptions: { color: "#FFFFFF" },
+          cornersSquareOptions: { type: "extra-rounded", color: "#FF6B00" },
+          cornersDotOptions: { type: "dot", color: "#0F172A" }
+        });
+
+        qrRef.current.innerHTML = "";
+        qrCode.append(qrRef.current);
+        setIsReady(true);
+      } catch (err) {
+        console.error("QR Render Error:", err);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (qrRef.current) qrRef.current.innerHTML = "";
+    };
+  }, [data]);
+
+  return (
+    <div className="relative">
+       <div ref={qrRef} className={cn("transition-all duration-700 transform", !isReady ? "opacity-0 scale-95" : "opacity-100 scale-100")} />
+       {!isReady && <div className="shimmer-box" />}
+    </div>
+  );
+};
+
 const WhatsAppManagement = () => {
-  const { branding } = useBranding();
-
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string>("primary");
-  const [primarySessionId, setPrimarySessionId] = useState<string>("primary");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'individual' | 'broadcast' | 'settings'>('individual');
+  const [linkingTab, setLinkingTab] = useState<'qr' | 'phone'>('qr');
   const [loading, setLoading] = useState(true);
-  const [showSuccess, setShowSuccess] = useState<string | null>(null);
   const [alert, setAlert] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, message: string, onConfirm: () => void, isDangerous?: boolean }>({ isOpen: false, message: '', onConfirm: () => {} });
 
-  const showAlert = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setAlert({ message, type });
-    setTimeout(() => setAlert(null), 4000);
-  };
-
-  // Test Message States
-  const [testPhone, setTestPhone] = useState("");
-  const [testMessage, setTestMessage] = useState("");
-  const [sendingTest, setSendingTest] = useState(false);
-
-  // Customer & Bulk Messaging States
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
-  const [bulkMode, setBulkMode] = useState<"select" | "paste">("select");
-  const [pastedNumbers, setPastedNumbers] = useState("");
-  const [bulkMessage, setBulkMessage] = useState("");
-  const [sendingBulk, setSendingBulk] = useState(false);
-  const [campaignDelay, setCampaignDelay] = useState(1000);
-  const [showCampaignSettings, setShowCampaignSettings] = useState(false);
-
-  // Pairing Code States
+  // Form States  
   const [pairingPhone, setPairingPhone] = useState("");
   const [pairingCode, setPairingCode] = useState("");
   const [requestingCode, setRequestingCode] = useState(false);
-  const [usePairingCode, setUsePairingCode] = useState(false);
 
-  // Media States
+  const [testPhone, setTestPhone] = useState("");
+  const [testMessage, setTestMessage] = useState("");
   const [testMedia, setTestMedia] = useState<{ data: string, mimetype: string, filename: string } | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
+
+  const [bulkNumbers, setBulkNumbers] = useState(""); 
+  const [bulkMessage, setBulkMessage] = useState("");
   const [bulkMedia, setBulkMedia] = useState<{ data: string, mimetype: string, filename: string } | null>(null);
+  const [sendingBulk, setSendingBulk] = useState(false);
 
-  // Agreement State
-  const [showLiabilityModal, setShowLiabilityModal] = useState(false);
-  const [agreedLiability, setAgreedLiability] = useState(false);
+  const [minDelay, setMinDelay] = useState(15); 
+  const [maxDelay, setMaxDelay] = useState(30); 
+  const [isRandomDelay, setIsRandomDelay] = useState(true);
 
-  const activeSession = sessions.find(s => s.id === selectedSessionId) || { id: selectedSessionId, status: "disconnected", qr: null, me: null };
-  const hasPendingSession = sessions.some(s => s.status !== "connected" && !s.me);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ isOpen: false, title: "", message: "", onConfirm: () => {} });
+
+  const currentSession = useMemo(() => sessions.find(s => s.id === selectedId), [sessions, selectedId]);
+  const isSelectedConnected = useMemo(() => currentSession?.status === 'connected', [currentSession]);
+  const hasPendingSession = useMemo(() => sessions.some(s => s.status !== 'connected'), [sessions]);
+
+  const showAlert = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setAlert({ message, type });
+    setTimeout(() => setAlert(null), 4000);
+  }, []);
 
   const fetchStatus = async () => {
     try {
       const data = await api.whatsapp.getStatus();
-
-      // Update success message logic: only if a session just became connected
-      data.sessions.forEach((newSession: WhatsAppSession) => {
-        const oldSession = sessions.find(s => s.id === newSession.id);
-        if (oldSession && oldSession.status !== "connected" && newSession.status === "connected") {
-          setShowSuccess(newSession.id);
-          setTimeout(() => setShowSuccess(null), 4000);
+      if (data && Array.isArray(data.sessions)) {
+        setSessions(data.sessions);
+        if (!selectedId && data.sessions.length > 0) {
+          setSelectedId(data.sessions[0].id);
         }
-      });
-
-      setSessions(data.sessions || []);
-      if (data.primaryId) setPrimarySessionId(data.primaryId);
-
-      // Ensure selected exists or fallback
-      if (data.sessions.length > 0 && !data.sessions.find((s: any) => s.id === selectedSessionId)) {
-        setSelectedSessionId(data.sessions[0].id);
       }
-
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching WhatsApp status:", error);
       setLoading(false);
     }
   };
-
-  const fetchCustomers = async () => {
-    try {
-      const data = await api.whatsapp.getCustomers();
-      setCustomers(data);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
 
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedId]);
 
-  const executeCreateSession = async () => {
-    if (sessions.length >= 10) return showAlert("Maximum 10 sessions allowed.", "error");
-    const newId = `session-${Date.now().toString().slice(-4)}`;
-    try {
-      setLoading(true);
-      await api.whatsapp.connect(newId);
-      setSelectedSessionId(newId);
-      await fetchStatus();
-    } catch (error) {
-      showAlert("Failed to create new session.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateSession = () => {
-    setShowLiabilityModal(true);
-  };
-
-  const handleConnect = async (id: string = selectedSessionId) => {
+  const handleCreateNode = async () => {
+    if (sessions.length >= 3) return showAlert("Cluster Capacity Reached (Max 3).", "error");
+    if (hasPendingSession) return showAlert("Resolve pending node linking first.", "info");
+    
+    const id = `node-${Math.random().toString(36).substring(2, 6)}`;
     try {
       setLoading(true);
       await api.whatsapp.connect(id);
-      setPairingCode("");
+      setSelectedId(id);
+      setLinkingTab('qr');
       await fetchStatus();
     } catch (error) {
-      console.error("Error connecting WhatsApp:", error);
+      showAlert("Gateway Connection Failed.", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDisconnect = (id: string = selectedSessionId, deletePersistently: boolean = false) => {
-    const msg = deletePersistently
-      ? `Are you sure you want to PERMANENTLY REMOVE session ${id}? This will stop all monitoring for this number.`
-      : `Are you sure you want to disconnect this session?`;
-
+  const handleDecommission = (id: string, isPending: boolean) => {
     setConfirmDialog({
       isOpen: true,
-      message: msg,
-      isDangerous: deletePersistently,
+      title: isPending ? "Cancel Initialisation" : "Decommission Node",
+      message: isPending 
+        ? "Abort the current cryptographic handshake? Node tokens will be purged." 
+        : "Permanently terminate this communication node? Re-linking will be required.",
       onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setConfirmDialog(p => ({ ...p, isOpen: false }));
         try {
           setLoading(true);
-          await api.whatsapp.disconnect(id, deletePersistently);
-          if (id === selectedSessionId && deletePersistently) {
-            setSelectedSessionId(primarySessionId);
-          }
+          await api.whatsapp.disconnect(id, true);
           await fetchStatus();
-          showAlert(deletePersistently ? "Session permanently removed." : "Session disconnected.", "success");
+          showAlert("Node decommissioned successfully.", "success");
         } catch (error) {
-          showAlert("Error disconnecting WhatsApp.", "error");
+          showAlert("Protocol error during disconnect.", "error");
         } finally {
           setLoading(false);
         }
@@ -175,780 +171,486 @@ const WhatsAppManagement = () => {
     });
   };
 
-  const handleSetPrimary = async (id: string) => {
+  const handleRequestAccessPin = async () => {
+    if (!pairingPhone || !selectedId) return;
     try {
-      setLoading(true);
-      await api.whatsapp.setPrimary(id);
-      setPrimarySessionId(id);
-      await fetchStatus();
-      showAlert("Primary session updated.", "success");
+      setRequestingCode(true);
+      const res = await api.whatsapp.requestPairingCode(selectedId, pairingPhone.replace(/\D/g, ''));
+      if (res.success) {
+        setPairingCode(res.code?.match(/.{1,4}/g)?.join('-') || res.code);
+        showAlert("Encryption PIN Received.", "success");
+      }
     } catch (error) {
-      showAlert("Failed to set primary session.", "error");
+      showAlert("Secure Tunnel Rejected Number.", "error");
     } finally {
-      setLoading(false);
+      setRequestingCode(false);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'test' | 'bulk') => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
-      const media = {
-        data: base64.split(',')[1],
-        mimetype: file.type,
-        filename: file.name
-      };
+      const media = { data: base64.split(',')[1], mimetype: file.type, filename: file.name };
       if (target === 'test') setTestMedia(media);
       else setBulkMedia(media);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleRequestPairingCode = async () => {
-    try {
-      setRequestingCode(true);
-      const res = await api.whatsapp.requestPairingCode(selectedSessionId, pairingPhone);
-      if (res.success) {
-        const code = res.code?.match(/.{1,4}/g)?.join('-') || res.code;
-        setPairingCode(code);
-      } else {
-        showAlert(res.error || "Failed to generate pairing code", "error");
-      }
-    } catch (e) {
-      showAlert("Network error while requesting code", "error");
-    } finally {
-      setRequestingCode(false);
-    }
-  };
-
-  const handleSendTest = async () => {
-    if (!testPhone || !testMessage) return;
+  const handleDispatch = async () => {
+    if (!testPhone || !testMessage || !selectedId) return;
     try {
       setSendingTest(true);
-      const res = await api.whatsapp.sendTest(testPhone, testMessage, selectedSessionId, testMedia);
+      const res = await api.whatsapp.sendTest(testPhone.replace(/\D/g, ''), testMessage, selectedId, testMedia);
       if (res.success) {
-        showAlert("Test message sent successfully!", "success");
-        setTestMessage("");
-        setTestMedia(null);
-      } else {
-        showAlert("Failed to send: " + (res.error || res.message), "error");
+        showAlert("Transmission Dispatched.", "success");
+        setTestMessage(""); setTestMedia(null);
       }
     } catch (error) {
-      showAlert("Error sending test message", "error");
+      showAlert("Broadcast Error.", "error");
     } finally {
       setSendingTest(false);
     }
   };
 
-  const handleBulkSend = async () => {
-    let targetPhones = selectedCustomers;
-    if (bulkMode === "paste") {
-      targetPhones = pastedNumbers.split(/[\n,]/).map(n => n.trim().replace(/\D/g, "")).filter(n => n.length >= 10);
-    }
-
-    if (targetPhones.length === 0 || !bulkMessage) {
-      showAlert("Please provide recipients and a message.", "info");
-      return;
-    }
-
+  const handleBulkLaunch = async () => {
+    const phones = bulkNumbers.split(/[\n,]/).map(n => n.trim().replace(/\D/g, '')).filter(n => n.length >= 10);
+    if (!phones.length || !bulkMessage || !selectedId) return showAlert("Required payload missing.", "info");
     try {
       setSendingBulk(true);
-      const res = await api.whatsapp.bulkSend(targetPhones, bulkMessage, selectedSessionId, bulkMedia, campaignDelay);
+      const delay = (isRandomDelay ? Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay) : minDelay) * 1000;
+      const res = await api.whatsapp.bulkSend(phones, bulkMessage, selectedId, bulkMedia, delay);
       if (res.success) {
-        showAlert(`Sent to ${res.results.filter((r: any) => r.status === 'success').length} numbers.`, "success");
-        setBulkMessage("");
-        setBulkMedia(null);
-        setSelectedCustomers([]);
-        setPastedNumbers("");
-      } else {
-        showAlert("Bulk sender failed.", "error");
+        showAlert("Bulk Cluster Initialized.", "success");
+        setBulkMessage(""); setBulkNumbers(""); setBulkMedia(null);
       }
     } catch (error) {
-      showAlert("Fatal error in bulk sender", "error");
+      showAlert("Cluster Failure.", "error");
     } finally {
       setSendingBulk(false);
     }
   };
 
-  const toggleCustomer = (phone: string) => {
-    setSelectedCustomers(prev =>
-      prev.includes(phone) ? prev.filter(p => p !== phone) : [...prev, phone]
-    );
-  };
-
-  const toggleAllCustomers = () => {
-    if (selectedCustomers.length === customers.length) {
-      setSelectedCustomers([]);
-    } else {
-      setSelectedCustomers(customers.map(c => c.phone));
-    }
-  };
-
   return (
-    <div className={cn(
-      "min-h-screen bg-[#fdfdfd] relative pb-24",
-      "[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-    )}>
-      {/* Custom Alert Toast */}
+    <div className="arventa-hub fade-in-up">
+      {/* Sidebar Account Manager */}
+      <aside className="arventa-sidebar">
+        <div className="flex items-center justify-between mb-2">
+           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Node Inventory ({sessions.length}/3)</h3>
+        </div>
+
+        <div className="flex-1 overflow-y-auto scrollbar-hide flex flex-col gap-3">
+          {sessions.map(s => (
+            <div 
+              key={s.id} 
+              onClick={() => setSelectedId(s.id)}
+              className={cn("account-card", selectedId === s.id && "active")}
+            >
+              <div className="flex items-center gap-4">
+                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center border", 
+                   selectedId === s.id ? "bg-white/10 border-white/10 shadow-inner" : "bg-white border-border-light shadow-sm"
+                 )}>
+                    <Smartphone size={18} className={selectedId === s.id ? "text-white" : "text-navy-slate"} />
+                 </div>
+                 <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold truncate leading-none">{s.me?.name || `Node ${s.id.slice(-4).toUpperCase()}`}</h4>
+                    <div className="flex items-center gap-2 mt-2">
+                       <div className={cn("status-badge", s.status === 'connected' && "connected")}>
+                          <div className="dot" />
+                          <span>{s.status}</span>
+                       </div>
+                    </div>
+                 </div>
+                 <ChevronRight size={14} className={cn("opacity-40 transition-transform", selectedId === s.id && "translate-x-1 opacity-100")} />
+              </div>
+            </div>
+          ))}
+
+          {sessions.length === 0 && (
+            <div className="py-20 text-center opacity-30 px-6">
+              <Activity size={40} className="mx-auto text-navy-slate mb-4 animate-pulse" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-navy-slate">System Standby</p>
+              <p className="text-[9px] font-bold mt-2 text-text-muted">Initialize your first node cluster below.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Dynamic Add Button */}
+        {sessions.length < 3 && (
+          <button 
+            onClick={handleCreateNode} 
+            disabled={loading || hasPendingSession}
+            className="premium-btn premium-btn-primary w-full"
+          >
+            <Plus size={20} /> Add New Account
+          </button>
+        )}
+      </aside>
+
+      {/* Main Staging Stage */}
+      <main className="arventa-stage">
+        <AnimatePresence mode="wait">
+        {!selectedId ? (
+          <motion.div 
+            key="empty" 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="flex-1 flex flex-col items-center justify-center text-center p-12"
+          >
+             <div className="w-24 h-24 bg-bg-main rounded-[2.5rem] flex items-center justify-center text-navy-slate mb-8 border border-border-light shadow-inner">
+                <Shield size={48} />
+             </div>
+             <h2 className="text-2xl font-black text-navy-dark tracking-tight">Access Control Required</h2>
+             <p className="text-sm text-text-muted mt-2 max-w-xs">Select a verified node from your inventory cluster to monitor transmission payloads.</p>
+          </motion.div>
+        ) : !isSelectedConnected ? (
+          /* Professional Linking Interface (Center Stage) */
+          <motion.div 
+            key="linking" 
+            initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            className="stage-content flex flex-col items-center justify-center"
+          >
+            <div className="linking-view">
+               <div className="mb-12">
+                  <h2 className="text-3xl font-black text-navy-dark tracking-tight">Provision Node Protocol</h2>
+                  <p className="text-sm font-bold text-text-muted uppercase tracking-[0.2em] mt-2">LINKING AUTHENTICATION INTERFACE</p>
+               </div>
+
+               <div className="linking-tabs">
+                  <button onClick={() => setLinkingTab('qr')} className={cn("linking-tab-btn", linkingTab === 'qr' && "active")}>QR Matrix</button>
+                  <button onClick={() => setLinkingTab('phone')} className={cn("linking-tab-btn", linkingTab === 'phone' && "active")}>Phone Pulse</button>
+               </div>
+
+               <div className="qr-container bg-white border-2 border-slate-50 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-8 opacity-5 text-navy-dark group-hover:rotate-12 transition-transform duration-1000"><Lock size={120} /></div>
+                  
+                  {linkingTab === 'qr' ? (
+                    <div className="animate-in fade-in zoom-in duration-500">
+                       <ProfessionalQRCode data={currentSession?.qr || ""} />
+                       <div className="mt-8">
+                          <p className="text-[10px] font-black uppercase text-navy-slate tracking-widest leading-relaxed">Matrix Verification Protocol</p>
+                          <p className="text-[9px] font-bold text-text-muted mt-1 uppercase">Scan with Linked Devices in WhatsApp 2.0</p>
+                       </div>
+                    </div>
+                  ) : (
+                    <div className="w-full max-w-xs mx-auto animate-in slide-in-from-right duration-500 py-6">
+                       {pairingCode ? (
+                          <div className="bg-navy-dark rounded-[2.5rem] p-10 pt-12 shadow-2xl relative group overflow-hidden">
+                             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-20" />
+                             <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-[0.4em] mb-4">Encryption Code</p>
+                             <p className="text-5xl font-black text-white tracking-[0.2em] transform transition-transform group-hover:scale-105 duration-500">{pairingCode}</p>
+                          </div>
+                       ) : (
+                          <div className="space-y-6">
+                             <div className="text-left">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Target Endpoint</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="+1 000 000 0000" 
+                                  value={pairingPhone} 
+                                  onChange={(e) => setPairingPhone(e.target.value)} 
+                                  className="premium-input text-center text-xl h-20 mt-1" 
+                                />
+                             </div>
+                             <button 
+                              onClick={handleRequestAccessPin} 
+                              disabled={!pairingPhone || requestingCode} 
+                              className="premium-btn premium-btn-primary w-full h-16 shadow-2xl"
+                             >
+                                {requestingCode ? <Loader2 className="animate-spin" /> : "Authorize Request"}
+                             </button>
+                          </div>
+                       )}
+                       <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mt-10 px-8 leading-6">EPHEMERAL PIN EXPIRES IN 120 SECONDS FOR MAXIMUM SECURITY.</p>
+                    </div>
+                  )}
+               </div>
+
+               <div className="mt-12 flex justify-center gap-4">
+                  <button 
+                    onClick={() => handleDecommission(selectedId!, true)}
+                    className="text-[10px] font-black text-text-muted hover:text-red-500 uppercase tracking-[0.3em] transition-all flex items-center gap-3"
+                  >
+                     <XCircle size={16} /> ABORT PROTOCOL
+                  </button>
+               </div>
+            </div>
+          </motion.div>
+        ) : (
+          /* Active Node Interface */
+          <motion.div 
+            key="active" 
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+            className="flex flex-col h-full overflow-hidden"
+          >
+            {/* Stage Header */}
+            <header className="stage-header">
+               <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-navy-dark rounded-2xl flex items-center justify-center text-white shadow-xl shadow-navy-dark/10">
+                     <Zap size={28} className="text-primary-accent" />
+                  </div>
+                  <div>
+                     <h2 className="text-2xl font-black text-navy-dark tracking-tight">{currentSession?.me?.name || "Verified Node"}</h2>
+                     <div className="flex items-center gap-3 mt-1">
+                        <ShieldCheck size={14} className="text-success-green" />
+                        <span className="text-xs font-bold text-text-muted font-mono tracking-tighter">+{currentSession?.me?.number} • END-TO-END ENCRYPTION ACTIVE</span>
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => handleDecommission(selectedId!, false)}
+                    className="premium-btn py-2 px-6 text-[10px] bg-red-50 text-red-500 border border-red-100 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                  >
+                     <Power size={14} /> DECOMMISSION NODE
+                  </button>
+               </div>
+            </header>
+
+            <div className="stage-content space-y-12">
+               {/* Context Tabs */}
+               <div className="feature-tabs scrollbar-hide">
+                  {[
+                    { id: 'individual', label: 'Direct Messenger', icon: Send },
+                    { id: 'broadcast', label: 'Bulk Campaigner', icon: Globe },
+                    { id: 'settings', label: 'Security Lab', icon: Shield }
+                  ].map(tab => (
+                    <button 
+                      key={tab.id} 
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={cn("feature-tab flex items-center gap-3", activeTab === tab.id && "active")}
+                    >
+                       <tab.icon size={16} className={activeTab === tab.id ? "text-primary-accent" : "text-text-muted opacity-40"} />
+                       <span className="uppercase tracking-widest">{tab.label}</span>
+                    </button>
+                  ))}
+               </div>
+
+               <AnimatePresence mode="wait">
+                  {activeTab === 'individual' && (
+                    <motion.div 
+                      key="direct" 
+                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      className="max-w-3xl space-y-10"
+                    >
+                       <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Destination Identification</label>
+                          <input 
+                            type="text" 
+                            placeholder="91 00000 00000" 
+                            value={testPhone} 
+                            onChange={(e) => setTestPhone(e.target.value)} 
+                            className="premium-input h-16 font-mono text-lg shadow-sm" 
+                          />
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Transmission Payload</label>
+                          <textarea 
+                            placeholder="Payload body..." 
+                            value={testMessage} 
+                            onChange={(e) => setTestMessage(e.target.value)} 
+                            className="premium-input h-56 resize-none py-6 text-sm leading-relaxed" 
+                          />
+                       </div>
+                       <div className="flex flex-col md:flex-row gap-6">
+                          <div className="flex-1 w-full">
+                             <label className="premium-btn premium-btn-secondary w-full h-16 text-xs border-dashed border-2 hover:border-navy-dark transition-all">
+                                {testMedia ? testMedia.filename : <><Paperclip size={18} /> ATTACH META-FILE</>}
+                                <input type="file" className="hidden" onChange={(e) => handleFileSelect(e, 'test')} />
+                             </label>
+                          </div>
+                          <button 
+                            onClick={handleDispatch} 
+                            disabled={sendingTest || !testPhone || !testMessage} 
+                            className="premium-btn premium-btn-primary w-full md:w-80 h-16 shadow-2xl"
+                          >
+                             {sendingTest ? <Loader2 className="animate-spin" /> : <Send size={20} />}
+                             INITIALIZE DISPATCH
+                          </button>
+                       </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'broadcast' && (
+                    <motion.div 
+                      key="broadcast" 
+                      initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                      className="space-y-10"
+                    >
+                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                          <div className="space-y-6">
+                             <div className="flex justify-between items-center px-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-text-muted">Target Identity List</label>
+                                <label className="text-[9px] font-black text-primary-accent bg-primary-accent/5 px-3 py-1.5 rounded-lg border border-primary-accent/10 cursor-pointer hover:bg-white hover:shadow-lg transition-all">
+                                   IMPORT MATRIX (.CSV)
+                                   <input type="file" accept=".csv" className="hidden" onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const reader = new FileReader();
+                                      reader.onload = (event) => {
+                                        const content = event.target?.result as string;
+                                        const numbers = content.match(/\b\d{10,15}\b/g);
+                                        if (numbers) {
+                                          setBulkNumbers(Array.from(new Set(numbers)).join("\n"));
+                                          showAlert(`${new Set(numbers).size} Nodes Localized.`, "success");
+                                        }
+                                        e.target.value = "";
+                                      };
+                                      reader.readAsText(file);
+                                   }} />
+                                </label>
+                             </div>
+                             <textarea 
+                               placeholder="Identities separated by line..." 
+                               value={bulkNumbers} 
+                               onChange={(e) => setBulkNumbers(e.target.value)} 
+                               className="premium-input h-80 font-mono text-sm leading-8" 
+                             />
+                             <div className="px-4 py-2 bg-navy-dark text-white rounded-xl text-[10px] font-black uppercase tracking-widest w-fit shadow-lg shadow-navy-dark/20">Active Set: {bulkNumbers.split(/[\n,]/).filter(n => n.trim()).length}</div>
+                          </div>
+                          <div className="space-y-10">
+                             <div className="space-y-4">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Universal Payload Template</label>
+                                <textarea 
+                                  placeholder="Broadcast payload..." 
+                                  value={bulkMessage} 
+                                  onChange={(e) => setBulkMessage(e.target.value)} 
+                                  className="premium-input h-64 shadow-sm" 
+                                />
+                             </div>
+                             <div className="p-10 bg-bg-main rounded-[2.5rem] border border-border-light space-y-8 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:rotate-45 transition-transform duration-1000"><Globe size={120} /></div>
+                                
+                                <div className="space-y-4 relative z-10">
+                                   <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Meta-Attachment</label>
+                                   <label className="premium-btn bg-white border border-border-light w-full h-16 text-[10px] font-black text-text-muted cursor-pointer overflow-hidden truncate px-8 rounded-2xl shadow-sm hover:shadow-md">
+                                      {bulkMedia ? bulkMedia.filename : "CHOOSE ATTACHMENT"}
+                                      <input type="file" className="hidden" onChange={(e) => handleFileSelect(e, 'bulk')} />
+                                   </label>
+                                </div>
+                                <button 
+                                  onClick={handleBulkLaunch} 
+                                  disabled={sendingBulk || !bulkNumbers || !bulkMessage} 
+                                  className="premium-btn premium-btn-primary w-full h-16 shadow-2xl mt-4 relative z-10"
+                                >
+                                   {sendingBulk ? <Loader2 className="animate-spin" /> : <Zap size={20} />}
+                                   LAUNCH CLUSTER BROADCAST
+                                </button>
+                             </div>
+                          </div>
+                       </div>
+                       
+                       <div className="p-8 bg-orange-50 rounded-[2.5rem] border border-orange-100 flex items-start gap-6">
+                          <ShieldAlert className="text-primary-accent shrink-0 mt-1" size={32} />
+                          <div className="space-y-2">
+                             <h4 className="text-[10px] font-black text-primary-accent uppercase tracking-[0.2em]">Anti-Ban Protocol (Ver 4.0)</h4>
+                             <p className="text-[10px] font-bold text-orange-700/80 leading-relaxed uppercase">Cluster transmission utilizes adaptive jitter intervals (20-45s) across the global node matrix to ensure identity trust-scores remain stabilized.</p>
+                          </div>
+                       </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'settings' && (
+                    <motion.div 
+                      key="settings" 
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                      className="max-w-2xl pt-10"
+                    >
+                       <div className="p-16 bg-navy-dark rounded-[3.5rem] text-center shadow-[0_45px_100px_rgba(15,23,42,0.4)] relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 p-16 opacity-5 text-white scale-150 rotate-12 group-hover:rotate-0 transition-transform duration-1000 pointer-events-none"><ShieldCheck size={260} /></div>
+                          <div className="relative z-10">
+                             <div className="w-24 h-24 bg-white/5 text-primary-accent rounded-[2rem] flex items-center justify-center mx-auto mb-10 border border-white/5 shadow-2xl">
+                                <Lock size={48} />
+                             </div>
+                             <h3 className="text-white text-3xl font-black tracking-tight underline decoration-primary-accent decoration-8 underline-offset-8 decoration-dotted">Security Lab Interface</h3>
+                             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] mt-8 mb-16">CRYPTOGRAPHIC TRANSMISSION CONTROLS</p>
+                             
+                             <div className="space-y-12 px-2">
+                                <div className="flex items-center justify-between p-10 bg-white/5 rounded-[2.5rem] border border-white/10 cursor-pointer hover:bg-white/10 transition-all shadow-inner" onClick={() => setIsRandomDelay(!isRandomDelay)}>
+                                   <div className="text-left">
+                                      <p className="text-white text-xl font-black tracking-tight">Node Jitter Transmission</p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Simulates high-fidelity human cadence</p>
+                                   </div>
+                                   <div className={cn("w-16 h-8 rounded-full transition-all flex items-center p-1.5 shadow-2xl", isRandomDelay ? "bg-primary-accent shadow-primary-accent/40" : "bg-slate-800")}>
+                                      <div className={cn("w-5 h-5 bg-white rounded-full shadow-lg transition-all transform", isRandomDelay ? "translate-x-8" : "translate-x-0")} />
+                                   </div>
+                                </div>
+
+                                <div className={cn("grid grid-cols-2 gap-10 transition-all duration-700", !isRandomDelay && "opacity-10 grayscale pointer-events-none scale-95 blur-sm")}>
+                                   <div className="p-12 bg-white/5 rounded-[3rem] border border-white/5 hover:border-primary-accent/30 transition-colors shadow-2xl">
+                                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-8">Floor Orbit (s)</p>
+                                      <input 
+                                        type="number" 
+                                        value={minDelay} 
+                                        onChange={(e) => setMinDelay(Number(e.target.value))} 
+                                        className="bg-transparent text-white text-6xl text-center font-black w-full focus:outline-none focus:text-primary-accent transition-colors" 
+                                      />
+                                   </div>
+                                   <div className="p-12 bg-white/5 rounded-[3rem] border border-white/5 hover:border-primary-accent/30 transition-colors shadow-2xl">
+                                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-8">Ceiling Orbit (s)</p>
+                                      <input 
+                                        type="number" 
+                                        value={maxDelay} 
+                                        onChange={(e) => setMaxDelay(Number(e.target.value))} 
+                                        className="bg-transparent text-white text-6xl text-center font-black w-full focus:outline-none focus:text-primary-accent transition-colors" 
+                                      />
+                                   </div>
+                                </div>
+                             </div>
+                          </div>
+                       </div>
+                    </motion.div>
+                  )}
+               </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+        </AnimatePresence>
+      </main>
+
+      {/* Persistence Modals & Alerts */}
       <AnimatePresence>
         {alert && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className={cn(
-              "absolute top-8 left-1/2 -translate-x-1/2 z-[100] px-8 py-4 rounded-[2rem] shadow-2xl flex items-center gap-4 border min-w-[350px]",
-              alert.type === 'success' ? "bg-white border-green-100 text-green-700 shadow-green-100" :
-              alert.type === 'error' ? "bg-white border-red-100 text-red-700 shadow-red-100" :
-              "bg-white border-blue-100 text-blue-700 shadow-blue-100"
-            )}
+          <motion.div 
+            initial={{ opacity: 0, y: 100, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[3000] px-12 py-7 bg-navy-dark/95 text-white rounded-[3rem] shadow-[0_40px_100px_rgba(0,0,0,0.5)] border border-white/10 flex items-center gap-10 min-w-[500px] backdrop-blur-3xl"
           >
-            <div className={cn(
-               "w-10 h-10 rounded-xl flex items-center justify-center",
-               alert.type === 'success' ? "bg-green-50" : alert.type === 'error' ? "bg-red-50" : "bg-blue-50"
-            )}>
-               {alert.type === 'success' ? <CheckCircle2 className="w-6 h-6" /> : 
-                alert.type === 'error' ? <AlertCircle className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
-            </div>
-            <p className="font-black text-sm uppercase tracking-tight flex-1">{alert.message}</p>
-            <button onClick={() => setAlert(null)} className="p-2 hover:bg-gray-50 rounded-lg"><X className="w-4 h-4 opacity-30" /></button>
+             <div className={cn("w-5 h-5 rounded-full shadow-[0_0_30px]", 
+                alert.type === 'error' ? "bg-red-500 shadow-red-500/50" : "bg-primary-accent shadow-primary-accent/50"
+             )} />
+             <div className="flex-1">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-1">{alert.type}</p>
+                <p className="text-base font-black leading-tight tracking-tight">{alert.message}</p>
+             </div>
+             <button onClick={() => setAlert(null)} className="text-slate-500 hover:text-white transition-all hover:scale-125"><X size={24} /></button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Custom Confirm Dialog */}
       <AnimatePresence>
         {confirmDialog.isOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl border border-gray-100"
-            >
-              <div className="flex flex-col items-center text-center gap-5">
-                <div className={cn("w-20 h-20 rounded-[2rem] flex items-center justify-center border-4 shadow-sm", confirmDialog.isDangerous ? "bg-red-50 text-red-500 border-white" : "bg-orange-50 text-orange-500 border-white")}>
-                  <AlertCircle className="w-10 h-10" />
+          <div className="fixed inset-0 z-[2005] flex items-center justify-center p-4">
+             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-navy-dark/60 backdrop-blur-md" onClick={() => setConfirmDialog(p => ({...p, isOpen: false}))} />
+             <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              className="bg-white rounded-[3.5rem] shadow-[0_50px_150px_rgba(0,0,0,0.3)] p-16 w-full max-w-xl relative z-[2006] text-center border border-slate-100"
+             >
+                <div className="w-24 h-24 bg-red-50 text-red-500 rounded-[2rem] flex items-center justify-center mx-auto mb-10 shadow-inner border border-red-100"><ShieldAlert size={48} /></div>
+                <h3 className="text-3xl font-black text-navy-dark tracking-tight">{confirmDialog.title}</h3>
+                <p className="text-base font-bold text-text-muted mt-6 mb-12 leading-relaxed px-10">{confirmDialog.message}</p>
+                <div className="grid grid-cols-2 gap-6">
+                   <button onClick={() => setConfirmDialog(p => ({ ...p, isOpen: false }))} className="premium-btn py-4 bg-bg-main text-text-muted text-[11px] font-black uppercase tracking-widest border border-border-light shadow-sm">Abort Operation</button>
+                   <button onClick={confirmDialog.onConfirm} className="premium-btn premium-btn-primary py-4 text-[11px] font-black uppercase tracking-widest shadow-2xl">Confirm Command</button>
                 </div>
-                <h3 className="text-2xl font-black text-gray-900 tracking-tighter">Security Prompt</h3>
-                <p className="text-sm font-medium text-gray-500 mb-2 leading-relaxed">{confirmDialog.message}</p>
-                <div className="flex flex-col w-full gap-2 mt-4">
-                  <button onClick={confirmDialog.onConfirm} className={cn("w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-md active:scale-95", confirmDialog.isDangerous ? "bg-red-500 hover:bg-red-600 shadow-red-200" : "bg-orange-500 hover:bg-orange-600 shadow-orange-200")}>AUTHORIZE</button>
-                  <button onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} className="w-full py-4 text-gray-500 hover:bg-gray-50 rounded-2xl font-black uppercase tracking-widest transition-colors">CANCEL</button>
-                </div>
-              </div>
-            </motion.div>
+             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* Liability Agreement Modal */}
-      <AnimatePresence>
-        {showLiabilityModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-gray-100"
-            >
-              <div className="flex flex-col gap-5">
-                <div className="w-16 h-16 rounded-3xl bg-orange-50 text-orange-500 flex items-center justify-center border-4 border-white shadow-sm mx-auto mb-2">
-                  <AlertCircle className="w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-black text-gray-900 tracking-tighter text-center leading-none">Developer Agreement</h3>
-                <div className="bg-orange-50/50 p-5 rounded-3xl border border-orange-100/50">
-                  <p className="text-xs font-bold text-gray-600 leading-relaxed text-center">
-                    WhatsApp may block or ban accounts for bulk messaging. 
-                    <br/><br/>
-                    <span className="text-orange-600 font-black uppercase tracking-widest text-[10px]">Important Disclaimer:</span>
-                    <br/>
-                    The developers and {branding.name} hold <span className="underline">zero liability</span> for any account suspensions, bans, or data loss. Use this gateway entirely at your own risk.
-                  </p>
-                </div>
-
-                <label className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors group">
-                  <input type="checkbox" checked={agreedLiability} onChange={(e) => setAgreedLiability(e.target.checked)} className="min-w-5 min-h-5 rounded-lg border-gray-300 text-orange-500 focus:ring-orange-500" />
-                  <span className="text-xs font-bold text-gray-600 group-hover:text-gray-900 transition-colors">I have read the agreement and take full responsibility.</span>
-                </label>
-
-                <div className="flex flex-col w-full gap-2 mt-2">
-                  <button 
-                    onClick={() => {
-                        setShowLiabilityModal(false);
-                        setAgreedLiability(false);
-                        executeCreateSession();
-                    }} 
-                    disabled={!agreedLiability}
-                    className="w-full py-4 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-md active:scale-95 bg-orange-500 hover:bg-orange-600 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed shadow-orange-200"
-                  >
-                    ACCEPT & CONTINUE
-                  </button>
-                  <button onClick={() => { setShowLiabilityModal(false); setAgreedLiability(false); }} className="w-full py-4 text-gray-500 hover:bg-gray-50 rounded-2xl font-black uppercase tracking-widest transition-colors">CANCEL</button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Header Section */}
-      <header className="px-6 md:px-12 pt-6 md:pt-12 pb-6 md:pb-8 max-w-[1800px] mx-auto w-full">
-        <h1 className="text-3xl md:text-5xl font-black text-gray-900 flex items-center gap-4 tracking-tighter">
-          WhatsApp Engine
-        </h1>
-        <p className="text-gray-400 mt-2 md:mt-3 text-[10px] md:text-sm font-bold uppercase tracking-[0.2em] opacity-60">Professional Multi-Channel Gateway • v2.0</p>
-      </header>
-
-      {/* Main Dashboard Grid */}
-      <div className="px-6 md:px-12 pb-12 w-full max-w-[1800px] mx-auto">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-12 w-full h-full border-t border-gray-100 pt-8 md:pt-12">
-        {/* Left: Session Control */}
-        <div className={cn(
-          "transition-all duration-500 space-y-8",
-          activeSession.status === "connected" ? "xl:col-span-8" : "xl:col-span-8 xl:col-start-3"
-        )}>
-
-          {/* Sessions Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSelectedSessionId(s.id)}
-                className={cn(
-                  "flex flex-col items-start gap-3 p-6 rounded-[2.5rem] transition-all border-2 relative group text-left",
-                  selectedSessionId === s.id
-                    ? "bg-white border-black shadow-2xl scale-[1.02] z-10"
-                    : "bg-gray-50/40 border-gray-100/50 text-gray-400 hover:bg-white hover:border-gray-200"
-                )}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <div className={cn(
-                    "w-3 h-3 rounded-full",
-                    s.status === "connected" ? "bg-[#25D366] shadow-[0_0_12px_rgba(37,211,102,0.4)]" :
-                      s.status === "connecting" ? "bg-orange-400 animate-pulse" : "bg-gray-300"
-                  )} />
-                  {s.id !== "primary" && (
-                    <Trash2
-                      onClick={(e) => { e.stopPropagation(); handleDisconnect(s.id, true); }}
-                      className="w-4 h-4 text-red-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                    />
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <p className="font-extrabold text-sm text-black tracking-tight leading-none">
-                    {s.me?.number ? `+${s.me.number}` : `Inactive Account`}
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    {primarySessionId === s.id && (
-                      <span className="text-[9px] font-black text-[#25D366] uppercase tracking-widest px-1.5 py-0.5 bg-green-50 rounded-md">Primary</span>
-                    )}
-                    <span className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">{s.status === 'disconnected' ? 'OFFLINE' : s.status}</span>
-                  </div>
-                </div>
-              </button>
-            ))}
-
-            <button
-              onClick={handleCreateSession}
-              disabled={sessions.length >= 10 || hasPendingSession}
-              className="flex flex-col items-center justify-center gap-3 p-6 bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-[2.5rem] hover:bg-gray-100/50 hover:border-gray-300 transition-all group disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                <Plus className="w-5 h-5 text-gray-400" />
-              </div>
-              <span className="font-bold text-[10px] uppercase tracking-[0.2em] text-gray-400">
-                {hasPendingSession ? "Complete Pending" : "Add Account"}
-              </span>
-            </button>
-          </div>
-
-          <div className="bg-white rounded-[2rem] md:rounded-[3rem] border border-gray-100 shadow-xl shadow-gray-200/50 overflow-hidden min-h-[500px]">
-            <div className="p-6 md:p-8 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-white to-gray-50/20">
-              <div className="flex items-center gap-4 md:gap-5">
-                <div className={cn(
-                  "w-14 h-14 md:w-16 md:h-16 rounded-2xl md:rounded-3xl flex items-center justify-center transition-all shadow-sm border shrink-0",
-                  activeSession.status === "connected" ? "bg-green-50 border-green-100 text-[#25D366]" : "bg-gray-50 border-gray-100 text-gray-400"
-                )}>
-                  {activeSession.status === "connected" ? <CheckCircle2 className="w-6 h-6 md:w-8 md:h-8" /> : <Smartphone className="w-6 h-6 md:w-8 md:h-8" />}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-xl md:text-2xl uppercase tracking-tighter text-gray-900 truncate max-w-[150px] sm:max-w-none">
-                      {activeSession.me?.name || (activeSession.id === 'primary' ? "Primary Session" : "Management Console")}
-                    </h3>
-                    {primarySessionId === activeSession.id && (
-                      <span className="bg-[#25D366]/10 text-[#25D366] px-2 py-0.5 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-widest border border-[#25D366]/20 whitespace-nowrap">Active Primary</span>
-                    )}
-                  </div>
-                  <p className="text-[9px] md:text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mt-1">Status: <span className={cn(
-                    activeSession.status === 'connected' ? "text-green-500" : activeSession.status === 'connecting' ? "text-orange-500" : "text-gray-400"
-                  )}>{activeSession.status === 'disconnected' ? 'NOT CONNECTED' : activeSession.status.toUpperCase()}</span></p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {primarySessionId !== activeSession.id && (
-                  <button
-                    onClick={() => handleSetPrimary(activeSession.id)}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-100 text-gray-900 rounded-xl md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-wider hover:border-black hover:shadow-md transition-all active:scale-95"
-                  >
-                    <CheckSquare className="w-4 h-4" />
-                    <span>Set as Primary</span>
-                  </button>
-                )}
-
-                {activeSession.status === "connected" && (
-                  <button
-                    onClick={() => handleDisconnect(activeSession.id, false)}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-widest border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                  >
-                    <Power className="w-4 h-4" />
-                    <span>DISCONNECT</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="p-6 md:p-10">
-              <AnimatePresence mode="wait">
-                {activeSession.status === "disconnected" && (
-                  <motion.div
-                    key="disconnected"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="flex flex-col items-center justify-center text-center py-20 min-h-[500px] space-y-10"
-                  >
-                    <div className="w-40 h-40 bg-gray-50 rounded-[4rem] flex items-center justify-center shadow-inner relative group">
-                      <div className="absolute inset-0 bg-gray-100/50 rounded-[4rem] scale-90 group-hover:scale-110 transition-transform duration-500" />
-                      <MessageSquare className="w-16 h-16 text-gray-200 relative z-10" />
-                      <div className="absolute top-6 right-6 bg-gray-300 w-5 h-5 rounded-full border-4 border-white shadow-sm" />
-                    </div>
-                    <div className="space-y-4">
-                      <h4 className="text-4xl font-black text-gray-900 uppercase tracking-tighter">Gateway Inactive</h4>
-                      <p className="text-gray-400 max-w-sm mx-auto text-base font-medium leading-relaxed">This session is currently dormant. Initialize the connection to start routing messages through this channel.</p>
-                    </div>
-                    <button
-                      onClick={() => handleConnect()}
-                      className="bg-gray-900 text-white px-12 py-6 rounded-[2.5rem] font-black uppercase tracking-widest hover:bg-black transition-all shadow-2xl shadow-gray-200 flex items-center gap-4 active:scale-95 group"
-                    >
-                      <QrCode className="w-6 h-6 text-[#25D366] group-hover:rotate-12 transition-transform" />
-                      <span>Execute QR Protocol</span>
-                    </button>
-                  </motion.div>
-                )}
-
-                {activeSession.status === "connecting" && (
-                  <motion.div
-                    key="connecting"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex flex-col items-center justify-center py-10 min-h-[500px] space-y-10"
-                  >
-                    <div className="text-center space-y-3 mb-6">
-                      <h4 className="text-4xl font-black text-orange-500 uppercase tracking-tighter flex items-center gap-3 justify-center">
-                        <div className="w-4 h-4 bg-orange-500 rounded-full animate-ping" />
-                        Connecting
-                      </h4>
-                      <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.3em]">Awaiting Security Handshake</p>
-                    </div>
-
-                    {activeSession.qr ? (
-                      !usePairingCode ? (
-                        <div className="flex flex-col items-center gap-8">
-                          <div className="relative group">
-                            <div className="absolute -inset-10 bg-[#25D366]/5 rounded-[5rem] blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-                            <div className="bg-white p-12 rounded-[4rem] border border-gray-100 shadow-2xl relative z-10 scale-105">
-                              {/* QR Code Container */}
-                              <div className="relative">
-                                <img src={activeSession.qr} alt="WhatsApp QR" className="w-72 h-72 opacity-95 rounded-2xl" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="bg-white p-3 rounded-2xl shadow-xl border border-gray-100 flex items-center justify-center">
-                                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path fillRule="evenodd" clipRule="evenodd" d="M12.0004 2C6.47754 2 2.00037 6.47715 2.00037 12C2.00037 13.9103 2.53724 15.6953 3.46821 17.2081L2.05608 22.3663L7.38214 20.9691C8.79093 21.6323 10.3541 22 12.0004 22C17.5232 22 22.0004 17.5228 22.0004 12C22.0004 6.47715 17.5232 2 12.0004 2ZM17.3323 15.6309C17.0706 17.0097 15.6888 17.9734 14.5367 17.7891C13.3846 17.6047 11.2312 16.5947 9.8 15.3414C8.36878 14.0881 7.21538 12.0734 7.03104 10.9213C6.8467 9.76918 7.81035 8.38734 9.18921 8.12563C9.46743 8.07284 9.77123 8.25718 9.8768 8.51347L10.5367 10.1135C10.634 10.35 10.569 10.6222 10.3705 10.7853L9.6766 11.3556C9.6766 11.3556 9.61053 11.6441 10.0211 12.3392C10.4316 13.0343 11.0851 13.6878 11.7802 14.0984C12.4753 14.5089 12.7638 14.4428 12.7638 14.4428L13.3341 13.7489C13.4972 13.5504 13.7694 13.4854 14.0059 13.5827L15.6059 14.2426C15.8622 14.3482 16.0465 14.652 15.9937 14.9302C15.732 16.309 17.5941 14.2521 17.3323 15.6309Z" fill="#25D366" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-4">
-                            <button
-                              onClick={() => handleConnect(selectedSessionId)}
-                              className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-50 hover:text-orange-600 transition-all border border-transparent hover:border-orange-100 shadow-sm"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                              <span>Regenerate QR</span>
-                            </button>
-                            <button
-                              onClick={() => setUsePairingCode(true)}
-                              className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-sm"
-                            >
-                              <Phone className="w-4 h-4" />
-                              <span>Login via Phone</span>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-6 py-6 w-full max-w-sm mx-auto">
-                           {pairingCode ? (
-                              <div className="text-center space-y-4">
-                                 <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest">Your Pairing Code</h5>
-                                 <div className="text-5xl font-black tracking-[0.2em] text-gray-900 bg-gray-50 py-6 px-10 rounded-3xl border border-gray-200 shadow-inner">
-                                    {pairingCode}
-                                 </div>
-                                 <p className="text-xs text-gray-500 font-medium max-w-[250px] mx-auto mt-4">Open WhatsApp &gt; Linked Devices &gt; Link with phone number and enter this code.</p>
-                                 <button onClick={() => setPairingCode("")} className="mt-6 text-[10px] uppercase font-black tracking-widest text-orange-500 hover:text-orange-600">Back</button>
-                              </div>
-                           ) : (
-                              <div className="w-full space-y-6">
-                                 <div className="space-y-3">
-                                   <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp Phone Number</label>
-                                   <input 
-                                     type="text" 
-                                     placeholder="+91..." 
-                                     value={pairingPhone} 
-                                     onChange={(e) => setPairingPhone(e.target.value)} 
-                                     className="w-full py-4 px-6 text-center text-xl font-black text-gray-900 bg-white rounded-2xl border-2 border-gray-100 focus:border-orange-500 focus:outline-none transition-colors shadow-sm placeholder-gray-300" 
-                                   />
-                                   <p className="text-[10px] text-center text-gray-400 font-bold px-2">Include your country code. Do not use spaces or brackets.</p>
-                                 </div>
-                                 <button 
-                                   onClick={handleRequestPairingCode} 
-                                   disabled={!pairingPhone || requestingCode} 
-                                   className="w-full py-5 bg-orange-500 text-white rounded-[1.5rem] font-black uppercase tracking-widest hover:bg-orange-600 disabled:opacity-50 transition-all shadow-xl shadow-orange-200"
-                                 >
-                                    {requestingCode ? <Loader2 className="w-5 h-5 mx-auto animate-spin" /> : "Request Pairing Code"}
-                                 </button>
-                                 <button onClick={() => setUsePairingCode(false)} className="w-full text-[10px] font-black text-gray-400 hover:text-gray-900 uppercase mt-2 tracking-widest">Use QR Code Instead</button>
-                              </div>
-                           )}
-                        </div>
-                      )
-                    ) : (
-                      <div className="flex flex-col items-center gap-6 py-20">
-                        <Loader2 className="w-16 h-16 text-[#FC8019] animate-spin" />
-                        <p className="font-black text-gray-400 tracking-widest uppercase text-xs">Authenticating Engine...</p>
-                      </div>
-                    )}
-
-                    <div className="text-center space-y-6">
-                      <p className="text-sm text-gray-400 font-medium max-w-xs mx-auto leading-relaxed">
-                        Open WhatsApp {">"} Linked Devices and scan to authorize this digital gateway.
-                      </p>
-                      <button
-                        onClick={() => handleDisconnect(selectedSessionId, false)}
-                        className="flex items-center gap-2 px-6 py-2 text-red-500 font-bold hover:bg-red-50 rounded-full transition-all mx-auto text-sm border border-transparent hover:border-red-100"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        <span>CANCEL ATTEMPT</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {activeSession.status === "connected" && (
-                  <motion.div
-                    key="connected"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="space-y-10 py-6"
-                  >
-                    <div className="flex items-center gap-4 mb-4">
-                      <h4 className="text-2xl font-black text-[#25D366] uppercase tracking-tighter">Connected</h4>
-                      <div className="h-2 w-2 rounded-full bg-[#25D366] animate-pulse" />
-                    </div>
-
-                    {showSuccess === activeSession.id && (
-                      <div className="bg-[#25D366] text-white p-5 rounded-[2rem] flex items-center gap-4 shadow-2xl shadow-green-200">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                          <CheckCircle2 className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <p className="font-black text-sm uppercase tracking-tight">Security Handshake Complete</p>
-                          <p className="text-xs font-bold opacity-80">Link established via {activeSession.me?.name}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100 group hover:border-[#25D366] transition-all">
-                        <div className="flex items-center gap-6">
-                          <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-[#25D366] shadow-md border border-gray-50 border-b-4 border-b-[#25D366] transition-transform group-hover:-translate-y-1">
-                            <Phone className="w-8 h-8" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Authenticated Identity</p>
-                            <p className="text-2xl font-black text-gray-900 leading-tight">+{activeSession.me?.number}</p>
-                            <p className="text-sm font-bold text-blue-500">Global API Broadcast Live</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-50 p-8 rounded-[2.5rem] border border-blue-100 space-y-3">
-                        <div className="flex items-center gap-2 text-blue-800">
-                          <SettingsIcon className="w-5 h-5 animate-spin-slow" />
-                          <span className="text-sm font-black uppercase tracking-tight">Session Capabilities</span>
-                        </div>
-                        <ul className="space-y-2">
-                          {["Automated Invoicing", "Loyalty Broadcasts", "Secure OTP Delivery"].map((cap, i) => (
-                            <li key={i} className="flex items-center gap-2 text-blue-600 text-xs font-bold">
-                              <CheckCircle2 className="w-3.3 h-3.3" />
-                              {cap}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 space-y-6 shadow-sm">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <h4 className="font-black text-lg flex items-center gap-2">
-                          <Send className="w-5 h-5 text-orange-500" />
-                          Direct Gateway Test
-                        </h4>
-                        <div className="flex items-center gap-3">
-                          <label className="w-10 h-10 bg-gray-50 hover:bg-gray-100 text-gray-500 rounded-xl flex items-center justify-center cursor-pointer transition-all border border-gray-100 shadow-sm shrink-0">
-                            <Plus className="w-5 h-5" />
-                            <input type="file" className="hidden" onChange={(e) => handleFileSelect(e, 'test')} />
-                          </label>
-                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">Attach Media</span>
-                        </div>
-                      </div>
-
-                      {testMedia && (
-                        <div className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100 mb-4">
-                          <div className="flex items-center gap-3">
-                            {testMedia.mimetype.startsWith('image/') ? <ImageIcon className="w-5 h-5 text-orange-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
-                            <div>
-                              <p className="text-xs font-black text-orange-900 truncate max-w-[200px]">{testMedia.filename}</p>
-                              <p className="text-[9px] font-bold text-orange-400 uppercase">{testMedia.mimetype}</p>
-                            </div>
-                          </div>
-                          <button onClick={() => setTestMedia(null)} className="p-2 hover:bg-orange-100 rounded-lg transition-colors"><X className="w-4 h-4 text-orange-400" /></button>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Target Phone</label>
-                          <input
-                            type="text"
-                            placeholder="+91..."
-                            value={testPhone}
-                            onChange={(e) => setTestPhone(e.target.value)}
-                            className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold focus:ring-4 focus:ring-orange-500/5 transition-all"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Test Message</label>
-                          <textarea
-                            placeholder="Type message..."
-                            value={testMessage}
-                            onChange={(e) => setTestMessage(e.target.value)}
-                            className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold focus:ring-4 focus:ring-orange-500/5 transition-all h-14 resize-none"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={handleSendTest}
-                        disabled={sendingTest || !testPhone || !testMessage}
-                        className="w-full bg-gray-900 text-white py-5 rounded-2xl font-black uppercase tracking-tight hover:bg-black transition-all disabled:opacity-30 shadow-xl shadow-gray-200"
-                      >
-                        {sendingTest ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Dispatch Direct Message"}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Directory & Campaigns (Only visible if connected) */}
-        <AnimatePresence>
-          {activeSession.status === "connected" && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className={cn(
-                "xl:col-span-4 bg-white p-1 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col h-[760px] sticky top-8",
-                "[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-              )}
-            >
-              <div className="p-8 pb-4">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
-                      <Users className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold">Contact Directory</h3>
-                      <p className="text-xs text-gray-400 font-bold uppercase">{customers.length} Verified Users</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={fetchCustomers}
-                    className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    <RefreshCw className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="flex bg-gray-50 p-1.5 rounded-2xl">
-                  <button
-                    onClick={() => setBulkMode("select")}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-tight transition-all",
-                      bulkMode === "select" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"
-                    )}
-                  >
-                    Select Contacts
-                  </button>
-                  <button
-                    onClick={() => setBulkMode("paste")}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-tight transition-all",
-                      bulkMode === "paste" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"
-                    )}
-                  >
-                    Manual Import
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-8 custom-scrollbar">
-                {bulkMode === "select" ? (
-                  <div className="space-y-3 py-4">
-                    <div
-                      onClick={toggleAllCustomers}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50/50 cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      {selectedCustomers.length === customers.length && customers.length > 0 ? (
-                        <CheckSquare className="w-6 h-6 text-[#25D366]" />
-                      ) : (
-                        <Square className="w-6 h-6 text-gray-300" />
-                      )}
-                      <span className="font-black text-sm uppercase tracking-tight">Select Complete List</span>
-                    </div>
-
-                    {customers.map((c, i) => (
-                      <div
-                        key={i}
-                        onClick={() => toggleCustomer(c.phone)}
-                        className={cn(
-                          "flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer",
-                          selectedCustomers.includes(c.phone) ? "bg-green-50 border-green-100" : "bg-white border-gray-50 hover:border-gray-100 shadow-sm"
-                        )}
-                      >
-                        {selectedCustomers.includes(c.phone) ? (
-                          <CheckSquare className="w-6 h-6 text-[#25D366]" />
-                        ) : (
-                          <Square className="w-6 h-6 text-gray-200" />
-                        )}
-                        <div className="flex-1">
-                          <p className="font-black text-sm">{c.phone}</p>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{c.name || "Customer"}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 space-y-4 h-full flex flex-col">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Batch Entry</label>
-                    <textarea
-                      placeholder="9876543210, 8888877777..."
-                      value={pastedNumbers}
-                      onChange={(e) => setPastedNumbers(e.target.value)}
-                      className="flex-1 w-full p-6 bg-gray-50 border-none rounded-[2.5rem] text-sm font-bold focus:ring-2 focus:ring-green-100 resize-none font-mono"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="p-8 bg-gray-50/30 border-t border-gray-50 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between ml-1">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Campaign Message</label>
-                    <label className="flex items-center gap-1.5 text-[9px] font-black text-orange-500 uppercase cursor-pointer hover:text-orange-600">
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <span>Attach File</span>
-                      <input type="file" className="hidden" onChange={(e) => handleFileSelect(e, 'bulk')} />
-                    </label>
-                  </div>
-
-                  {bulkMedia && (
-                    <div className="flex items-center justify-between p-3 bg-white rounded-2xl border-2 border-orange-50 mb-2">
-                      <div className="flex items-center gap-3">
-                        <ImageIcon className="w-4 h-4 text-orange-500" />
-                        <p className="text-[10px] font-black text-gray-800 truncate max-w-[150px]">{bulkMedia.filename}</p>
-                      </div>
-                      <X onClick={() => setBulkMedia(null)} className="w-4 h-4 text-gray-300 hover:text-red-500 cursor-pointer" />
-                    </div>
-                  )}
-
-                  <textarea
-                    placeholder="Announce your offer..."
-                    value={bulkMessage}
-                    onChange={(e) => setBulkMessage(e.target.value)}
-                    className="w-full p-6 bg-white border-2 border-gray-50 rounded-[2rem] text-sm font-bold focus:ring-2 focus:ring-green-50 h-32 resize-none shadow-sm"
-                  />
-                </div>
-
-                {/* Campaign Settings Toolbar */}
-                <div className="flex flex-col gap-2 mt-4 mb-4">
-                  <div className="flex items-center justify-end px-2">
-                    <button onClick={() => setShowCampaignSettings(!showCampaignSettings)} className={cn("flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-colors", showCampaignSettings ? "text-orange-500" : "text-gray-400 hover:text-gray-900")}>
-                       <SettingsIcon className="w-3.5 h-3.5" /> Delay Settings
-                    </button>
-                  </div>
-                  
-                  <AnimatePresence>
-                    {showCampaignSettings && (
-                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                         <div className="bg-orange-50/50 p-5 rounded-3xl border border-orange-100/50">
-                           <div className="flex items-center justify-between mb-3">
-                              <label className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Message Delay Spacing</label>
-                              <span className="text-xs font-bold text-orange-500">{campaignDelay / 1000}s</span>
-                           </div>
-                           <input type="range" min="1000" max="15000" step="500" value={campaignDelay} onChange={(e) => setCampaignDelay(Number(e.target.value))} className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer accent-orange-500" />
-                           <p className="text-[9px] font-bold text-orange-400 uppercase mt-3 tracking-wide flex items-center gap-2"><AlertCircle className="w-3 h-3" /> Prevents account suspension by scattering outgoing messages.</p>
-                         </div>
-                       </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 mt-2">
-                  <div className="bg-white px-4 py-3 rounded-2xl border border-gray-100 text-center w-24">
-                    <p className="text-[10px] font-black text-gray-400 uppercase leading-none mb-1">Recipients</p>
-                    <p className="text-sm font-black text-gray-900">{bulkMode === "select" ? selectedCustomers.length : "List Import"}</p>
-                  </div>
-                  <button
-                    onClick={handleBulkSend}
-                    disabled={sendingBulk || activeSession.status !== "connected" || (!selectedCustomers.length && !pastedNumbers) || !bulkMessage}
-                    className="flex-1 bg-[#25D366] text-white py-5 rounded-2xl font-black uppercase tracking-tight hover:bg-[#128C7E] transition-all shadow-xl shadow-green-100 flex items-center justify-center gap-3 disabled:opacity-20"
-                  >
-                    {sendingBulk ? <Loader2 className="w-5 h-5 animate-spin" /> : <LayoutGrid className="w-5 h-5" />}
-                    <span>Launch Campaign</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default WhatsAppManagement;

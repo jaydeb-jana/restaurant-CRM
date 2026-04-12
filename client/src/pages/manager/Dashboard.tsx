@@ -9,7 +9,7 @@ import { useBranding } from "../../config/branding";
 import { useOrders } from "../../hooks/useOrders";
 
 
-import { Order, Table } from "@types/index";
+import { Order, Table } from "@/types";
 
 // Helper for Tailwind classes
 const cn = (...classes: any[]) => classes.filter(Boolean).join(" ");

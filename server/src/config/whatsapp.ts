@@ -1,20 +1,32 @@
-import * as WWebJS from "whatsapp-web.js";
-const { Client, LocalAuth } = (WWebJS as any).default || WWebJS;
-export const { MessageMedia } = (WWebJS as any).default || WWebJS;
-import type { Client as ClientType } from "whatsapp-web.js";
-import qrcode from "qrcode";
+import makeWASocket, { 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    fetchLatestBaileysVersion, 
+    makeInMemoryStore, 
+    jidDecode,
+    WAMessageStubType,
+    WASocket,
+    proto,
+    delay
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
+import pino from "pino";
+import path from "path";
+import fs from "fs";
 import mongoose from "mongoose";
+
+const logger = pino({ level: "silent" });
 
 // Helper for formatting WhatsApp numbers
 export const formatPhoneForWhatsApp = (phone: string) => {
   let cleaned = phone.replace(/\D/g, "");
   // If it starts with 91 and has 12 digits, it's already full
   if (cleaned.length === 12 && cleaned.startsWith("91")) {
-      return `${cleaned}@c.us`;
+      return `${cleaned}@s.whatsapp.net`;
   }
   // If 10 digits, add 91
   if (cleaned.length === 10) cleaned = "91" + cleaned;
-  return `${cleaned}@c.us`;
+  return `${cleaned}@s.whatsapp.net`;
 };
 
 export interface WhatsAppSession {
@@ -28,16 +40,20 @@ export interface WhatsAppSession {
 }
 
 class WhatsAppSessionManager {
-  private clients: Map<string, ClientType> = new Map();
+  private sockets: Map<string, WASocket> = new Map();
   private statuses: Map<string, WhatsAppSession> = new Map();
   private primarySessionId: string = "primary";
+  private sessionsDir = path.join(process.cwd(), "whatsapp_sessions_auth");
 
-  constructor() {}
+  constructor() {
+    if (!fs.existsSync(this.sessionsDir)) {
+      fs.mkdirSync(this.sessionsDir, { recursive: true });
+    }
+  }
 
   public async loadSessions() {
     if (mongoose.connection.readyState !== 1) return;
     try {
-      // Load primary session ID from settings
       const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
       if (settings?.primaryWhatsAppId) {
         this.primarySessionId = settings.primaryWhatsAppId;
@@ -45,14 +61,12 @@ class WhatsAppSessionManager {
 
       const savedSessions = await mongoose.connection.db?.collection("whatsapp_sessions").find({}).toArray();
       
-      // Initialize statuses for all saved sessions as disconnected
       if (savedSessions) {
         for (const s of savedSessions) {
           this.updateStatus(s.sessionId, { id: s.sessionId, status: "disconnected", qr: null, me: s.me || null });
         }
       }
 
-      // Automatically start the primary session if it exists
       if (this.primarySessionId) {
         console.log(`Starting primary WhatsApp session: ${this.primarySessionId}`);
         this.initSession(this.primarySessionId).catch(console.error);
@@ -75,111 +89,116 @@ class WhatsAppSessionManager {
   }
 
   public async initSession(id: string) {
-    // SINGLE ACTIVE SESSION RULE: Disconnect others first
-    for (const [existingId, client] of this.clients.entries()) {
-      if (existingId !== id) {
-        console.log(`Stopping session ${existingId} to start ${id}`);
-        await this.disconnect(existingId, false);
-      }
-    }
+    // SINGLE ACTIVE SESSION RULE (Optional, keeping as per original logic)
+    // for (const [existingId, socket] of this.sockets.entries()) {
+    //   if (existingId !== id) {
+    //      await this.disconnect(existingId, false);
+    //   }
+    // }
 
-    if (this.clients.has(id)) return;
+    if (this.sockets.has(id)) return;
     if (this.statuses.get(id)?.status === "connecting") return;
-    if (this.clients.size >= 10) throw new Error("Maximum 10 WhatsApp sessions allowed.");
 
     this.updateStatus(id, { id, status: "connecting", qr: null, me: null });
 
-    const client = new Client({
-      authStrategy: new LocalAuth({ clientId: id }),
-      puppeteer: {
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-accelerated-2d-canvas", "--no-first-run", "--no-zygote", "--disable-gpu"]
-      },
-      webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    const authDir = path.join(this.sessionsDir, id);
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { version } = await fetchLatestBaileysVersion();
+
+    const socket = makeWASocket({
+      version,
+      printQRInTerminal: false,
+      auth: state,
+      logger,
+      browser: ["Spice Kraft", "Chrome", "1.0.0"],
+      markOnlineOnConnect: true,
+    });
+
+    this.sockets.set(id, socket);
+
+    socket.ev.on("creds.update", saveCreds);
+
+    socket.ev.on("connection.update", async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        this.updateStatus(id, { qr: qr, status: "connecting" });
       }
-    });
 
-    client.on("qr", async (qr) => {
-      console.log(`WhatsApp QR Received for session: ${id}`);
-      this.updateStatus(id, { qr: await qrcode.toDataURL(qr), status: "connecting" });
-    });
-
-    client.on("ready", async () => {
-      console.log(`WhatsApp Session ${id} is ready!`);
-      const me = {
-        name: (client.info as any).pushname || "Business Account",
-        number: (client.info as any).wid?.user || ""
-      };
-      this.updateStatus(id, { status: "connected", qr: null, me });
-      
-      if (mongoose.connection.readyState === 1) {
-        if (id === this.primarySessionId) {
-          await mongoose.connection.db?.collection("settings").updateOne(
-            { id: "app-settings" },
-            { $set: { whatsappConnected: true } },
-            { upsert: true }
-          );
-        }
+      if (connection === "close") {
+        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        console.log(`WhatsApp Session ${id} connection closed. Reconnecting: ${shouldReconnect}`);
         
-        await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
-          { sessionId: id },
-          { $set: { sessionId: id, lastSeen: new Date(), me } },
-          { upsert: true }
-        );
+        this.updateStatus(id, { status: "disconnected", qr: null });
+        this.sockets.delete(id);
+
+        if (shouldReconnect) {
+          this.initSession(id);
+        } else {
+            if (mongoose.connection.readyState === 1 && id === this.primarySessionId) {
+                await mongoose.connection.db?.collection("settings").updateOne(
+                  { id: "app-settings" },
+                  { $set: { whatsappConnected: false } },
+                  { upsert: true }
+                );
+            }
+            // Cleanup auth dir
+            fs.rmSync(authDir, { recursive: true, force: true });
+        }
+      } else if (connection === "open") {
+        console.log(`WhatsApp Session ${id} is ready!`);
+        const user = socket.user!;
+        const me = {
+          name: user.name || "Business Account",
+          number: user.id.split(":")[0] || ""
+        };
+        
+        this.updateStatus(id, { status: "connected", qr: null, me });
+
+        if (mongoose.connection.readyState === 1) {
+            if (id === this.primarySessionId) {
+              await mongoose.connection.db?.collection("settings").updateOne(
+                { id: "app-settings" },
+                { $set: { whatsappConnected: true } },
+                { upsert: true }
+              );
+            }
+            
+            await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
+              { sessionId: id },
+              { $set: { sessionId: id, lastSeen: new Date(), me } },
+              { upsert: true }
+            );
+        }
       }
     });
 
-    client.on("authenticated", () => {
-      console.log(`WhatsApp Session ${id} Authenticated`);
-    });
-
-    client.on("auth_failure", (msg) => {
-      console.error(`WhatsApp Session ${id} Auth Failure:`, msg);
-      this.updateStatus(id, { status: "disconnected", qr: null });
-    });
-
-    client.on("disconnected", async (reason) => {
-      console.log(`WhatsApp Session ${id} Disconnected:`, reason);
-      this.updateStatus(id, { status: "disconnected", qr: null, me: null });
-      this.clients.delete(id);
-      
-      if (mongoose.connection.readyState === 1 && id === this.primarySessionId) {
-        await mongoose.connection.db?.collection("settings").updateOne(
-          { id: "app-settings" },
-          { $set: { whatsappConnected: false } },
-          { upsert: true }
-        );
-      }
-    });
-
-    this.clients.set(id, client);
-    client.initialize().catch(err => {
-      console.error(`Failed to initialize session ${id}:`, err);
-      this.updateStatus(id, { status: "disconnected" });
-      this.clients.delete(id);
-    });
+    this.sockets.set(id, socket);
   }
 
   public async disconnect(id: string, deletePersistently: boolean = false) {
-    const client = this.clients.get(id);
-    if (client) {
+    const socket = this.sockets.get(id);
+    if (socket) {
       try {
-        await client.logout();
-        await client.destroy();
+        await socket.logout();
+        socket.end(undefined);
       } catch (err) {
         console.error(`Error disconnecting session ${id}:`, err);
       }
-      this.clients.delete(id);
+      this.sockets.delete(id);
       this.updateStatus(id, { status: "disconnected", qr: null, me: null });
     }
 
-    if (deletePersistently && mongoose.connection.readyState === 1) {
-      await mongoose.connection.db?.collection("whatsapp_sessions").deleteOne({ sessionId: id });
-      if (this.primarySessionId === id) {
-          this.primarySessionId = "primary";
-          await this.setPrimary("primary");
+    if (deletePersistently) {
+      const authDir = path.join(this.sessionsDir, id);
+      fs.rmSync(authDir, { recursive: true, force: true });
+      
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.db?.collection("whatsapp_sessions").deleteOne({ sessionId: id });
+        if (this.primarySessionId === id) {
+            this.primarySessionId = "primary";
+            await this.setPrimary("primary");
+        }
       }
     }
   }
@@ -189,25 +208,29 @@ class WhatsAppSessionManager {
   }
 
   public getAllSessions() {
-    // Filter out sessions that are disconnected AND have never been linked (no 'me' info)
-    // UNLESS it's the primary session or it's currently 'connecting'
     return Array.from(this.statuses.values()).filter(s => {
       if (s.status === "connected" || s.status === "connecting") return true;
-      if (s.me) return true; // Keep history of linked but currently disconnected numbers
-      if (s.id === this.primarySessionId) return true; // Keep primary
-      return false; // Remove failed/unlinked temporary sessions
+      if (s.me) return true;
+      if (s.id === this.primarySessionId) return true;
+      return false;
     });
   }
 
   public async requestPairingCode(id: string, phone: string): Promise<string> {
-    const client = this.clients.get(id);
-    if (!client) throw new Error("Session is not ready. Please try connecting again.");
+    const socket = this.sockets.get(id);
+    if (!socket) throw new Error("Session is not ready. Please try connecting again.");
 
     const cleanPhone = phone.replace(/\D/g, "");
     if (!cleanPhone) throw new Error("Invalid phone number format.");
 
     try {
-      const code = await (client as any).requestPairingCode(cleanPhone);
+      // Ensure phone has country code for pairing code
+      let formattedPhone = cleanPhone;
+      if (formattedPhone.length === 10) {
+        formattedPhone = "91" + formattedPhone;
+      }
+      
+      const code = await socket.requestPairingCode(formattedPhone);
       return code;
     } catch (err: any) {
       console.error("Error requesting pairing code:", err);
@@ -215,8 +238,8 @@ class WhatsAppSessionManager {
     }
   }
 
-  public getClient(id: string) {
-    return this.clients.get(id);
+  public getSocket(id: string) {
+    return this.sockets.get(id);
   }
 
   public getPrimaryId() {
@@ -235,7 +258,5 @@ export const initWhatsApp = () => {
   whatsappManager.loadSessions().catch(console.error);
 };
 
-// Common exports for compatibility (aliased to dynamic primary session)
 export const getPrimaryStatus = () => whatsappManager.getSession(whatsappManager.getPrimaryId())?.status || "disconnected";
-export const getPrimaryClient = () => whatsappManager.getClient(whatsappManager.getPrimaryId());
-
+export const getPrimarySocket = () => whatsappManager.getSocket(whatsappManager.getPrimaryId());

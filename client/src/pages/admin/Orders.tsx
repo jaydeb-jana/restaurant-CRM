@@ -31,24 +31,51 @@ const timeFilters = [
   { label: "Last 6 Months", value: 180 * 24 * 60 * 60 * 1000 },
   { label: "Last 12 Months", value: 365 * 24 * 60 * 60 * 1000 },
   { label: "Last 2 Years", value: 730 * 24 * 60 * 60 * 1000 },
+  { label: "Custom Range", value: -1 },
 ];
 
-const TimeRangeDropdown = ({ selected, onSelect, options }: any) => {
+const TimeRangeDropdown = ({ selected, onSelect, options, customStart, customEnd, onCustomStartChange, onCustomEndChange }: any) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-4 bg-white px-6 py-4 rounded-xl border border-gray-200 hover:border-orange-500 shadow-sm transition-all group h-full"
-      >
-        <Calendar className="w-5 h-5 text-gray-500" />
-        <div className="text-left font-medium">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Time Range</p>
-          <p className="text-sm font-bold text-gray-900">{selected.label}</p>
-        </div>
-        <ChevronDown className={cn("w-5 h-5 text-gray-400 transition-transform", isOpen && "rotate-180")} />
-      </button>
+      <div className="flex flex-col sm:flex-row gap-4 h-full">
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center space-x-4 bg-white px-6 py-4 rounded-xl border border-gray-200 hover:border-orange-500 shadow-sm transition-all group h-full whitespace-nowrap"
+        >
+          <Calendar className="w-5 h-5 text-gray-500" />
+          <div className="text-left font-medium">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Time Range</p>
+            <p className="text-sm font-bold text-gray-900">{selected.label}</p>
+          </div>
+          <ChevronDown className={cn("w-5 h-5 text-gray-400 transition-transform", isOpen && "rotate-180")} />
+        </button>
+
+        {selected.value === -1 && (
+          <div className="flex items-center gap-3 bg-white px-5 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex flex-col">
+              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Start Date</span>
+              <input 
+                type="date" 
+                value={customStart}
+                onChange={(e) => onCustomStartChange(e.target.value)}
+                className="text-xs font-bold text-gray-900 bg-transparent border-none p-0 focus:ring-0"
+              />
+            </div>
+            <div className="w-px h-8 bg-gray-100" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">End Date</span>
+              <input 
+                type="date" 
+                value={customEnd}
+                onChange={(e) => onCustomEndChange(e.target.value)}
+                className="text-xs font-bold text-gray-900 bg-transparent border-none p-0 focus:ring-0"
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       <AnimatePresence>
         {isOpen && (
@@ -58,7 +85,7 @@ const TimeRangeDropdown = ({ selected, onSelect, options }: any) => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-gray-100 shadow-xl p-2 z-50"
+              className="absolute right-0 mt-2 w-64 bg-white rounded-xl border border-gray-100 shadow-xl p-2 z-50 max-h-96 overflow-y-auto scrollbar-hide"
             >
               <div className="flex flex-col">
                 {options.map((opt: any) => (
@@ -186,6 +213,8 @@ const AdminOrders = () => {
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | "all">("all");
   const [selectedTimeFilter, setSelectedTimeFilter] = useState(timeFilters[2]);
+  const [customStartDate, setCustomStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customEndDate, setCustomEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [search, setSearch] = useState("");
 
@@ -220,18 +249,31 @@ const AdminOrders = () => {
   };
 
   const filteredOrders = useMemo(() => {
-    const timeCutoff = Date.now() - selectedTimeFilter.value;
+    let timeCutoff = Date.now() - selectedTimeFilter.value;
+    let customStart = 0;
+    let customEnd = Infinity;
+
+    if (selectedTimeFilter.value === -1) {
+      customStart = customStartDate ? new Date(customStartDate).getTime() : 0;
+      customEnd = customEndDate ? new Date(customEndDate).getTime() + (24 * 60 * 60 * 1000) - 1 : Infinity;
+    }
+
     return orders
       .filter(o => {
         const matchesSearch = (o?.id || "").toLowerCase().includes((search || "").toLowerCase()) || 
                              (o?.tableId || "").toLowerCase().includes((search || "").toLowerCase());
         const matchesStatus = selectedStatus === "all" || o.status === selectedStatus;
-        const matchesTime = new Date(o.createdAt).getTime() >= timeCutoff;
+        
+        const time = new Date(o.createdAt).getTime();
+        const matchesTime = selectedTimeFilter.value === -1
+          ? (time >= customStart && time <= customEnd)
+          : (time >= timeCutoff);
+          
         const matchesCustomer = !selectedCustomer || o.userId === selectedCustomer.id;
         return matchesSearch && matchesStatus && matchesTime && matchesCustomer;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [orders, search, selectedStatus, selectedTimeFilter, selectedCustomer]);
+  }, [orders, search, selectedStatus, selectedTimeFilter, selectedCustomer, customStartDate, customEndDate]);
 
   if (loading && orders.length === 0) {
     return (
@@ -303,6 +345,10 @@ const AdminOrders = () => {
               selected={selectedTimeFilter} 
               onSelect={setSelectedTimeFilter} 
               options={timeFilters} 
+              customStart={customStartDate}
+              customEnd={customEndDate}
+              onCustomStartChange={setCustomStartDate}
+              onCustomEndChange={setCustomEndDate}
             />
           </div>
 
