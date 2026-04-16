@@ -10,7 +10,7 @@ import {
 
 export const sendOTP = async (req: Request, res: Response) => {
   const { phone } = req.body;
-  const otp = "123456";
+  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Real random OTP
   console.log(`Sending OTP ${otp} to ${phone}`);
 
   const status = getPrimaryStatus();
@@ -19,8 +19,21 @@ export const sendOTP = async (req: Request, res: Response) => {
   if (status === "connected" && socket) {
     try {
       const chatId = formatPhoneForWhatsApp(phone);
-      const branding = getBranding();
-      const otpTemplate = `*${branding.name}*\n\nYour secure login OTP is: *${otp}*\n\nPlease do not share this code with anyone. Happy dining! 🍛`;
+      
+      // Fetch custom templates from settings
+      const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
+      const templates = settings?.otpTemplates || [];
+      
+      let otpTemplate = "";
+      if (templates.length > 0) {
+        // Pick random template and replace {(0)} with otp
+        const randomTpl = templates[Math.floor(Math.random() * templates.length)];
+        otpTemplate = randomTpl.replace(/\{\(0\)\}/g, otp);
+      } else {
+        // Fallback default
+        const branding = getBranding();
+        otpTemplate = `*${branding.name}*\n\nYour secure login OTP is: *${otp}*\n\nPlease do not share this code with anyone. Happy dining! 🍛`;
+      }
 
       await socket.sendMessage(chatId, { text: otpTemplate });
       res.json({ success: true, message: "OTP sent via WhatsApp", otp }); 

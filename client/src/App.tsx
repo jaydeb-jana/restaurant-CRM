@@ -66,6 +66,7 @@ export default function App() {
               {/* Admin Routes */}
               <Route path="/admin" element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}>
                 <Route index element={<AdminDashboard />} />
+                <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="menu" element={<AdminMenuItems />} />
                 <Route path="tables" element={<AdminTables />} />

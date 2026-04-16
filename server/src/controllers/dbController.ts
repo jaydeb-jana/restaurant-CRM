@@ -20,6 +20,18 @@ export const getCollection = async (req: Request, res: Response) => {
 export const createItem = async (req: Request, res: Response) => {
   try {
     const { collection } = req.params;
+    const { id, ...data } = req.body;
+    
+    if (id) {
+       // Support Upsert if ID is provided
+       await mongoose.connection.db?.collection(collection).updateOne(
+         { id },
+         { $set: { id, ...data } },
+         { upsert: true }
+       );
+       return res.json({ id, ...data });
+    }
+
     const newItem = { id: Date.now().toString(), ...req.body };
     await mongoose.connection.db?.collection(collection).insertOne(newItem);
     const { _id, ...rest } = newItem as any;
@@ -62,18 +74,20 @@ export const getSettings = async (req: Request, res: Response) => {
   try {
     const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
     
-    // Merge database settings (isOpen, etc) with JSON branding config
+    // Merge database settings (delays, AI params) with JSON branding config
     const branding = getBranding();
     const mergedSettings = {
       id: "app-settings",
+      ...settings, // Include all existing DB settings (minDelay, aiAgentName, etc.)
       isOpen: settings?.isOpen ?? true,
       whatsappConnected: settings?.whatsappConnected ?? false,
-      restaurantName: branding.name, // Always use JSON source
-      ...branding // Include all other branding details
+      // Priority branding overrides if needed
+      restaurantName: branding.name || settings?.restaurantName || "Spice Kraft",
+      ...branding 
     };
 
-    
-    res.json(mergedSettings);
+    const { _id, ...cleanSettings } = mergedSettings as any;
+    res.json(cleanSettings);
   } catch (error) {
     res.status(500).json({ error: "Settings read error" });
   }

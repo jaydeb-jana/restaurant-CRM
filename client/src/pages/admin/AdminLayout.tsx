@@ -139,7 +139,10 @@ const AdminLayout = () => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto scroll-smooth pt-16 lg:pt-0">
-        <div className="p-6 lg:p-10 max-w-[1600px] mx-auto">
+        <div className={cn(
+          "mx-auto w-full h-full",
+          location.pathname === "/admin/whatsapp" ? "p-0 max-w-none" : "p-6 lg:p-10 max-w-[1600px]"
+        )}>
           <Outlet />
         </div>
       </main>

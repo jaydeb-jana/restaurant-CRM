@@ -20,8 +20,8 @@ export const setupSecurity = (app: any) => {
 
   // Limit requests from same API
   const limiter = rateLimit({
-    max: 100, // limit each IP to 100 requests per windowMs
-    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Increased to allow dashboard polling
+    windowMs: 15 * 60 * 1000, 
     message: 'Too many requests from this IP, please try again in 15 minutes!',
   });
   app.use('/api', limiter);

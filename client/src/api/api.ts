@@ -3,7 +3,11 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000/api/v1"
 export const api = {
   get: async (collection: string) => {
     const res = await fetch(`${API_BASE}/db/${collection}`);
-    return res.json();
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return res.json();
+    }
+    return { success: false, error: "Invalid JSON response" };
   },
   post: async (collection: string, data: any) => {
     const res = await fetch(`${API_BASE}/db/${collection}`, {
@@ -11,7 +15,11 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return res.json();
+    }
+    return { success: false, error: "Invalid JSON response" };
   },
   put: async (collection: string, id: string, data: any) => {
     const res = await fetch(`${API_BASE}/db/${collection}/${id}`, {
@@ -55,10 +63,22 @@ export const api = {
 
     getStatus: async () => {
       const res = await fetch(`${API_BASE}/whatsapp/status`);
-      return res.json();
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        return res.json();
+      }
+      return { success: false, sessions: [], error: "Invalid JSON response" };
     },
     connect: async (id: string = "primary") => {
       const res = await fetch(`${API_BASE}/whatsapp/connect`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      return res.json();
+    },
+    register: async (id: string) => {
+      const res = await fetch(`${API_BASE}/whatsapp/register`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id })
@@ -93,7 +113,7 @@ export const api = {
       const res = await fetch(`${API_BASE}/whatsapp/customers`);
       return res.json();
     },
-    bulkSend: async (phones: string[], message: string, sessionId: string = "primary", media?: any, delay?: number) => {
+    bulkSend: async (phones: string[], message: string | string[], sessionId: string = "primary", media?: any, delay?: number) => {
       const res = await fetch(`${API_BASE}/whatsapp/bulk-send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

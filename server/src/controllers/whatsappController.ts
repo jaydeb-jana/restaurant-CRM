@@ -47,6 +47,17 @@ export const connect = async (req: Request, res: Response, next: NextFunction) =
   }
 };
 
+export const register = async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: "Session ID required" });
+  try {
+    await whatsappManager.registerSession(id);
+    res.json({ success: true, sessionId: id });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const disconnect = async (req: Request, res: Response, next: NextFunction) => {
   const { id, delete: deletePersistently } = req.body;
   const sessionId = id || "primary";
@@ -81,8 +92,20 @@ export const getCustomers = async (req: Request, res: Response, next: NextFuncti
 export const bulkSend = async (req: Request, res: Response, next: NextFunction) => {
   const { phones, message, sessionId, media, delay } = req.body;
   try {
-    const results = await WhatsAppService.bulkSend(phones, message, sessionId, media, delay);
-    res.json({ success: true, results });
+    // Fire and forget: Start the process in the background
+    WhatsAppService.bulkSend(phones, message, sessionId, media, delay)
+      .then(results => {
+        const successCount = results.filter(r => r.status === "success").length;
+        console.log(`[Broadcast] Completed batch of ${phones.length}. Success: ${successCount}, Failed: ${phones.length - successCount}`);
+      })
+      .catch(err => console.error("[Broadcast Engine Error]:", err));
+
+    // Respond immediately to the client
+    res.json({ 
+      success: true, 
+      message: `Broadcast engine for ${phones.length} recipients has been successfully initiated. Process will continue in the background even if you close your browser.`,
+      dispatchId: Date.now().toString()
+    });
   } catch (err) {
     next(err);
   }

@@ -23,24 +23,38 @@ export class WhatsAppService {
 
     const chatId = formatPhoneForWhatsApp(phone);
     
+    let messageContent: any = {};
     if (media && media.data) {
       const buffer = Buffer.from(media.data, "base64");
-      const type = media.mimetype.split('/')[0];
+      const mime = media.mimetype || "";
       
-      let messageContent: any = {};
-      if (type === "image") messageContent = { image: buffer, caption: message };
-      else if (type === "video") messageContent = { video: buffer, caption: message };
-      else if (type === "audio") messageContent = { audio: buffer, caption: message };
-      else messageContent = { document: buffer, mimetype: media.mimetype, fileName: media.filename || "file", caption: message };
-
-      await socket.sendMessage(chatId, messageContent);
+      if (mime.startsWith("image/")) {
+        messageContent = { image: buffer, caption: message || "", mimetype: mime };
+      } else if (mime.startsWith("video/")) {
+        messageContent = { video: buffer, caption: message || "", mimetype: mime };
+      } else if (mime.startsWith("audio/")) {
+        messageContent = { 
+          audio: buffer, 
+          mimetype: mime.includes("mp4") ? mime : "audio/mp4",
+          ptt: mime.includes("ogg") || mime.includes("opus"),
+        };
+      } else {
+        messageContent = { 
+          document: buffer, 
+          mimetype: mime || "application/octet-stream", 
+          fileName: media.filename || "attachment",
+          caption: message || "" 
+        };
+      }
     } else {
-      await socket.sendMessage(chatId, { text: message });
+      messageContent = { text: message };
     }
+
+    await socket.sendMessage(chatId, messageContent);
     return { success: true };
   }
 
-  static async bulkSend(phones: string[], message: string, sessionId: string, media?: any, delayMs: number = 1000) {
+  static async bulkSend(phones: string[], message: string | string[], sessionId: string, media?: any, delayMs: number = 1000) {
     const id = sessionId || "primary";
     const socket = whatsappManager.getSocket(id);
     const session = whatsappManager.getSession(id);
@@ -49,35 +63,102 @@ export class WhatsAppService {
       throw new Error(`WhatsApp session ${id} not connected`);
     }
 
-    const results = [];
-    let mediaContent: any = null;
+    const broadcastId = `bcast_${Date.now()}`;
+    const messages = Array.isArray(message) ? message.filter(m => m.trim().length > 0) : [message];
 
-    if (media && media.data) {
-      const buffer = Buffer.from(media.data, "base64");
-      const type = media.mimetype.split('/')[0];
-      if (type === "image") mediaContent = { image: buffer, caption: message };
-      else if (type === "video") mediaContent = { video: buffer, caption: message };
-      else if (type === "audio") mediaContent = { audio: buffer, caption: message };
-      else mediaContent = { document: buffer, mimetype: media.mimetype, fileName: media.filename || "file", caption: message };
+    if (messages.length === 0) {
+      throw new Error("No valid messages provided");
     }
 
+    // Initialize History Log
+    const historyEntry = {
+      id: broadcastId,
+      sessionId: id,
+      totalRecipients: phones.length,
+      successCount: 0,
+      failCount: 0,
+      status: "processing",
+      startTime: new Date(),
+      results: [] as any[]
+    };
+
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.db?.collection("broadcast_history").insertOne(historyEntry);
+    }
+
+    const results = [];
+    
+    // Internal loop
     for (const phone of phones) {
       try {
         const chatId = formatPhoneForWhatsApp(phone);
-        if (mediaContent) {
-          await socket.sendMessage(chatId, mediaContent);
+        const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+        
+        let messageContent: any = {};
+        if (media && media.data) {
+          const buffer = Buffer.from(media.data, "base64");
+          const mime = media.mimetype || "";
+          
+          if (mime.startsWith("image/")) {
+            messageContent = { image: buffer, caption: randomMessage || "", mimetype: mime };
+          } else if (mime.startsWith("video/")) {
+            messageContent = { video: buffer, caption: randomMessage || "", mimetype: mime };
+          } else if (mime.startsWith("audio/")) {
+            messageContent = { 
+              audio: buffer, 
+              mimetype: mime.includes("mp4") ? mime : "audio/mp4",
+              ptt: mime.includes("ogg") || mime.includes("opus"),
+            };
+          } else {
+            messageContent = { 
+              document: buffer, 
+              mimetype: mime || "application/octet-stream", 
+              fileName: media.filename || "attachment",
+              caption: randomMessage || "" 
+            };
+          }
         } else {
-          await socket.sendMessage(chatId, { text: message });
+          messageContent = { text: randomMessage };
         }
-        results.push({ phone, status: "success" });
+
+        await socket.sendMessage(chatId, messageContent);
+        const result = { phone, status: "success", timestamp: new Date() };
+        results.push(result);
+        historyEntry.successCount++;
       } catch (e: any) {
-        results.push({ phone, status: "failed", error: e.message });
+        const result = { phone, status: "failed", error: e.message, timestamp: new Date() };
+        results.push(result);
+        historyEntry.failCount++;
       }
       
-      if (delayMs > 0) {
+      // Update DB every 5 messages or at the end to avoid excessive DB writes
+      if (results.length % 5 === 0 || results.length === phones.length) {
+         if (mongoose.connection.readyState === 1) {
+           await mongoose.connection.db?.collection("broadcast_history").updateOne(
+             { id: broadcastId },
+             { $set: { 
+                 successCount: historyEntry.successCount, 
+                 failCount: historyEntry.failCount,
+                 lastUpdate: new Date()
+               } 
+             }
+           );
+         }
+      }
+
+      if (delayMs > 0 && results.length < phones.length) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
+
+    // Finalize History Log
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.db?.collection("broadcast_history").updateOne(
+        { id: broadcastId },
+        { $set: { status: "completed", endTime: new Date() } }
+      );
+    }
+
     return results;
   }
 
