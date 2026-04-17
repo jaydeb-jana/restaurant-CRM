@@ -17,16 +17,18 @@ export interface BrandingConfig {
   };
 }
 
+import { env } from "./env.config";
+
 export const branding: BrandingConfig = {
-  name: "Jaydevb Kraft",
-  shortName: "JaydevbKraft",
+  name: env.APP_NAME,
+  shortName: env.APP_SHORT_NAME,
   description: "Premium Restaurant CRM & Management System",
   logo: "/assets/images/logo.png",
   favicon: "/favicon.ico",
-  copyright: "© 2024 Jaydevb Kraft. All rights reserved.",
+  copyright: `© ${new Date().getFullYear()} ${env.APP_NAME}. All rights reserved.`,
   contact: {
-    email: "hello@jaydevbkraft.com",
-    phone: "+91 98765 43210",
+    email: env.APP_EMAIL,
+    phone: env.APP_PHONE,
     address: "123 Food Street, Culinary City, PIN 123456"
   },
   socials: {

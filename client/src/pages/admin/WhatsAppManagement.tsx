@@ -4,7 +4,7 @@ import {
   MessageSquare, QrCode, CheckCircle2, RefreshCw, Send, Loader2, XCircle,
   Users, CheckSquare, Square, Smartphone, Plus, Trash2, Power, LayoutGrid,
   Settings as SettingsIcon, AlertCircle, Phone, Paperclip, ImageIcon, FileText, X,
-  Trash, ChevronRight, LogOut, ShieldCheck, Hash, Music, Bot, MessageCircle, ShieldAlert, Edit2
+  Trash, ChevronRight, LogOut, ShieldCheck, Hash, Music, Bot, MessageCircle, ShieldAlert, Edit2, Zap, Settings, History, BarChart3, Filter, User, Clock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../api/utils";
@@ -17,6 +17,7 @@ interface WhatsAppSession {
   me: {
     name: string;
     number: string;
+    profilePic?: string;
   } | null;
 }
 
@@ -85,7 +86,11 @@ const WhatsAppManagement = () => {
   const [primarySessionId, setPrimarySessionId] = useState<string>("primary");
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
-  const [activeTab, setActiveTab] = useState<'individual' | 'broadcast' | 'customers' | 'ai-agent' | 'settings'>('individual');
+  const [activeTab, setActiveTab] = useState<'individual' | 'broadcast' | 'customers' | 'ai-agent' | 'settings' | 'history'>('individual');
+  const [messagesHistory, setMessagesHistory] = useState<any[]>([]);
+  const [broadcastHistory, setBroadcastHistory] = useState<any[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState("all");
 
   // Individual/Direct States
   const [testPhone, setTestPhone] = useState("");
@@ -128,7 +133,7 @@ const WhatsAppManagement = () => {
   const [usePairingCode, setUsePairingCode] = useState(false);
 
   const activeSession = sessions.find(s => s.id === selectedSessionId) || { id: selectedSessionId, status: "disconnected", qr: null, me: null };
-  const hasPendingSession = sessions.some(s => s.status !== "connected" && !s.me);
+  const hasPendingSession = sessions.some(s => (s.status === 'connecting' || s.status === 'disconnected') && !s.me);
 
   const showAlert = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setAlert({ message, type });
@@ -164,6 +169,42 @@ const WhatsAppManagement = () => {
   const [useContextHistory, setUseContextHistory] = useState(false);
   const [contextLimit, setContextLimit] = useState(10);
   const [activeBotSessions, setActiveBotSessions] = useState<string[]>([]);
+  const [typingSimulation, setTypingSimulation] = useState(false);
+  
+  const fetchHistory = async () => {
+    try {
+      setIsHistoryLoading(true);
+      const [msgs, bcast] = await Promise.all([
+        api.get('db/whatsapp_messages'),
+        api.get('db/broadcast_history')
+      ]);
+      // Sort by newest first
+      setMessagesHistory(Array.isArray(msgs) ? msgs.slice().reverse() : []);
+      setBroadcastHistory(Array.isArray(bcast) ? bcast.slice().reverse() : []);
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (activeTab === 'history') {
+      fetchHistory();
+      interval = setInterval(fetchHistory, 8000); 
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    }
+  }, [activeTab]);
+  const [minTyping, setMinTyping] = useState(2);
+  const [maxTyping, setMaxTyping] = useState(5);
+  const [multiMessageReply, setMultiMessageReply] = useState(true);
+  const [isAccountDetailsVisible, setIsAccountDetailsVisible] = useState(false);
+  const [globalAiActive, setGlobalAiActive] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const fetchAiData = async () => {
     try {
@@ -245,8 +286,35 @@ const WhatsAppManagement = () => {
         api.whatsapp.getCustomers(),
         api.getSettings()
       ]);
-      setSessions(data.sessions || []);
-      if (data.primaryId) setPrimarySessionId(data.primaryId);
+      const updatedSessions = data.sessions || [];
+      setSessions(updatedSessions);
+      
+      const activeSessions = updatedSessions.filter(s => s.status === 'connected');
+      const currentPrimaryId = data.primaryId;
+
+      if (currentPrimaryId) {
+        setPrimarySessionId(currentPrimaryId);
+        const primarySession = updatedSessions.find(s => s.id === currentPrimaryId);
+        if (primarySession?.status !== 'connected' && activeSessions.length > 0) {
+          const nextId = activeSessions[0].id;
+          api.whatsapp.setPrimary(nextId);
+          setPrimarySessionId(nextId);
+        }
+      } else if (activeSessions.length > 0) {
+        const nextId = activeSessions[0].id;
+        api.whatsapp.setPrimary(nextId);
+        setPrimarySessionId(nextId);
+      }
+
+      // Auto-select a session if none is selected or current one is gone
+      if (!selectedSessionId || !updatedSessions.some(s => s.id === selectedSessionId)) {
+        if (updatedSessions.length > 0) {
+          setSelectedSessionId(updatedSessions[0].id);
+        } else {
+          setSelectedSessionId("primary");
+        }
+      }
+
       setCustomers(customersData || []);
 
       // Load specific settings if they exist
@@ -266,6 +334,11 @@ const WhatsAppManagement = () => {
         if (settings.contextLimit) setContextLimit(settings.contextLimit);
         if (settings.activeBotSessions) setActiveBotSessions(settings.activeBotSessions);
         if (settings.typingDelay) setTypingDelay(settings.typingDelay);
+        if (settings.typingSimulation !== undefined) setTypingSimulation(settings.typingSimulation);
+        if (settings.minTyping) setMinTyping(settings.minTyping);
+        if (settings.maxTyping) setMaxTyping(settings.maxTyping);
+        if (settings.multiMessageReply !== undefined) setMultiMessageReply(settings.multiMessageReply);
+        if (settings.globalAiActive !== undefined) setGlobalAiActive(settings.globalAiActive);
       }
       
       setLoading(false);
@@ -291,7 +364,12 @@ const WhatsAppManagement = () => {
         useContextHistory,
         contextLimit,
         activeBotSessions,
-        typingDelay
+        typingDelay,
+        typingSimulation,
+        minTyping,
+        maxTyping,
+        multiMessageReply,
+        globalAiActive
       });
       showAlert("Protection & Communication protocols updated!", "success");
     } catch (error) {
@@ -410,6 +488,15 @@ const WhatsAppManagement = () => {
         try {
           setLoading(true);
           await api.whatsapp.disconnect(id, deletePersistently);
+          
+          if (id === primarySessionId) {
+            const nextActive = sessions.find(s => s.id !== id && s.status === 'connected');
+            if (nextActive) {
+              await api.whatsapp.setPrimary(nextActive.id);
+              setPrimarySessionId(nextActive.id);
+            }
+          }
+
           if (id === selectedSessionId && deletePersistently) {
             const remaining = sessions.filter(s => s.id !== id);
             setSelectedSessionId(remaining.length > 0 ? remaining[0].id : primarySessionId);
@@ -598,6 +685,17 @@ const WhatsAppManagement = () => {
             </button>
 
             <button
+              onClick={() => setActiveTab('history')}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                activeTab === 'history' ? "bg-indigo-50 text-indigo-500 shadow-inner" : "text-slate-400 hover:bg-slate-50"
+              )}
+              title="Messaging Analytics"
+            >
+              <History className="w-5 h-5" />
+            </button>
+
+            <button
               onClick={() => setActiveTab('settings')}
               className={cn(
                 "p-2 rounded-lg transition-all",
@@ -622,44 +720,62 @@ const WhatsAppManagement = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
-          {sessions.map(s => (
+          {sessions
+            .filter(s => s.status === 'connected' || s.me?.number || s.id === selectedSessionId)
+            .map(s => (
             <div
               key={s.id}
-              onClick={() => { setSelectedSessionId(s.id); setActiveTab('individual'); }}
+              onClick={() => {
+                setSelectedSessionId(s.id);
+                setIsAccountDetailsVisible(false);
+                setActiveTab('individual');
+              }}
               className={cn(
-                "w-full p-4 rounded-xl flex items-center gap-4 transition-all border cursor-pointer",
-                selectedSessionId === s.id
-                  ? "bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-200"
-                  : "bg-white border-gray-100 text-slate-600 hover:border-slate-300"
+                "group w-full p-4 rounded-2xl flex items-center gap-4 transition-all cursor-pointer relative overflow-hidden",
+                selectedSessionId === s.id ? "bg-slate-900 text-white shadow-xl scale-[1.02]" : "bg-white border border-gray-100 hover:border-slate-300 text-slate-600"
               )}
             >
-              <div className={cn(
-                "w-3 h-3 rounded-full shrink-0",
-                s.status === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                  s.status === 'connecting' ? "bg-amber-500 animate-pulse" : "bg-gray-300"
-              )} />
+              <div className="relative">
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border-2",
+                  selectedSessionId === s.id ? "border-slate-800" : "border-white"
+                )}>
+                  {s.me?.profilePic ? (
+                    <img src={s.me.profilePic} alt="DP" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={cn("w-full h-full flex items-center justify-center", s.status === 'connected' ? "bg-emerald-50 text-emerald-500" : "bg-slate-100 text-slate-400")}>
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
+                </div>
+                <div className={cn(
+                  "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white",
+                  s.status === 'connected' ? "bg-emerald-500" : (s.status === 'connecting' || s.id === selectedSessionId && !s.me?.number) ? "bg-amber-500 animate-pulse" : "bg-red-500"
+                )} />
+              </div>
 
-              <div className="flex-1 text-left truncate">
-                <p className={cn("text-sm font-bold truncate", selectedSessionId === s.id ? "text-white" : "text-slate-900")}>
-                  {s.me?.number ? `+${s.me.number}` : "Pending Session"}
+              <div className="flex-1 text-left min-w-0">
+                <p className={cn("text-xs font-bold truncate mb-0.5", selectedSessionId === s.id ? "text-white" : "text-slate-900")}>
+                  {s.me?.name || (s.id === selectedSessionId && !s.me?.number ? "New Connection" : "Offline Account")}
                 </p>
-                <div className="flex items-center gap-2">
-                  {s.id === primarySessionId && s.status === 'connected' && <span className="text-[9px] uppercase font-black text-emerald-500">Primary</span>}
-                  {activeBotSessions.includes(s.id) && <span className="text-[9px] uppercase font-black text-amber-500 flex items-center gap-1"><Bot className="w-2.5 h-2.5" /> AI Active</span>}
-                  <span className="text-[10px] opacity-60 font-medium uppercase tracking-wider">{s.status === 'disconnected' && !s.me ? 'IDLE' : s.status}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "text-[9px] font-black uppercase tracking-widest truncate",
+                    selectedSessionId === s.id ? "text-white/60" : "text-slate-400"
+                  )}>
+                    {s.me?.number ? `+${s.me.number}` : 'SETUP REQUIRED'}
+                  </span>
+                  {s.status !== 'connected' && s.me?.number && (
+                    <span className="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Disconnected</span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
-
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDisconnect(s.id, true); }}
-                  className="p-1 px-2 hover:bg-red-500 hover:text-white rounded-md transition-all text-[10px] font-bold"
-                  title={s.status === 'connected' ? "Remove Account" : "Cancel Connection"}
-                >
-                  {s.status === 'connected' ? <Trash2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                </button>
-              </div>
+              {s.id === primarySessionId && (
+                <div className="absolute top-2 right-2">
+                   <ShieldCheck className={cn("w-3 h-3", selectedSessionId === s.id ? "text-emerald-400" : "text-emerald-500")} />
+                </div>
+              )}
             </div>
           ))}
           {sessions.length === 0 && !loading && (
@@ -674,21 +790,138 @@ const WhatsAppManagement = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-[calc(100vh-64px)] overflow-hidden">
         {/* Header Actions */}
-        <div className="bg-white border-b border-gray-200 px-8 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className={cn(
-              "w-12 h-12 rounded-xl flex items-center justify-center text-xl",
-              activeSession.status === 'connected' ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-400"
-            )}>
-              {activeSession.status === 'connected' ? <CheckCircle2 className="w-6 h-6" /> : <Smartphone className="w-6 h-6" />}
+        {activeSession.status === 'connected' && (
+          <div className="bg-white border-b border-gray-200 px-8 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 relative">
+          <div className="flex items-center gap-5">
+            <div className="relative group">
+              <div className={cn(
+                "w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden border-4 border-white shadow-xl transition-all group-hover:scale-105",
+                activeSession.status === 'connected' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+              )}>
+                {activeSession.me?.profilePic ? (
+                  <img src={activeSession.me.profilePic} alt="User DP" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-8 h-8" />
+                )}
+                <div className={cn(
+                  "absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-4 border-white shadow-sm",
+                  activeSession.status === 'connected' ? "bg-emerald-500" : "bg-slate-300"
+                )} />
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">{activeSession.me?.name || (activeSession.status === 'connected' ? "Active Account" : "WhatsApp Setup")}</h1>
+            
+            <div className="relative">
               <div className="flex items-center gap-2">
-                {activeSession.id === primarySessionId && activeSession.status === 'connected' && (
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-md uppercase tracking-tight">Primary Connection</span>
+                 <h1 className="text-2xl font-black text-slate-900 tracking-tight">{activeSession.me?.name || "WhatsApp Setup"}</h1>
+                 <button 
+                   onClick={() => setIsAccountDetailsVisible(!isAccountDetailsVisible)}
+                   className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-slate-50 rounded-lg transition-all"
+                 >
+                   <Edit2 className="w-4 h-4" />
+                 </button>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                {activeSession.me?.number && <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">+{activeSession.me.number}</span>}
+                {activeSession.id === primarySessionId && (
+                  <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md">
+                     <ShieldCheck className="w-3 h-3" />
+                     <span className="text-[9px] font-black uppercase">Main System</span>
+                  </div>
                 )}
               </div>
+
+              {/* Account Dropdown */}
+              <AnimatePresence>
+                {isAccountDetailsVisible && (
+                  <div className="fixed inset-0 z-40 flex items-start justify-center pt-24">
+                     <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsAccountDetailsVisible(false)}
+                        className="fixed inset-0 bg-transparent"
+                     />
+                     <motion.div
+                       initial={{ opacity: 0, scale: 0.95 }}
+                       animate={{ opacity: 1, scale: 1 }}
+                       exit={{ opacity: 0, scale: 0.95 }}
+                       className="relative w-72 bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 p-6 overflow-hidden"
+                     >
+                        <div className="flex items-center justify-between mb-4">
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profile Configuration</p>
+                        </div>
+                     
+                     <div className="space-y-5">
+                        <div className="space-y-1.5">
+                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-tight ml-1 text-left block">Account Display Name</label>
+                           <input 
+                             type="text" 
+                             value={activeSession.me?.name || ""} 
+                             onChange={(e) => {
+                                const newSessions = sessions.map(s => s.id === activeSession.id ? { ...s, me: { ...s.me, name: e.target.value } } : s);
+                                setSessions(newSessions as any);
+                             }}
+                             className="w-full bg-slate-50 border border-gray-100 p-3 rounded-2xl text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 outline-none transition-all"
+                             placeholder="Account Nickname"
+                           />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                           <div className="p-3 bg-slate-50 rounded-2xl border border-gray-50">
+                              <p className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Session ID</p>
+                              <p className="text-[10px] font-black text-slate-600 truncate">{activeSession.id}</p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-2xl border border-gray-50">
+                              <p className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Linked At</p>
+                              <p className="text-[10px] font-black text-slate-600">Active</p>
+                           </div>
+                        </div>
+
+                        <button 
+                          onClick={async () => {
+                             try {
+                               await api.put(`db/whatsapp_sessions/${activeSession.id}`, { me: activeSession.me });
+                               showAlert("Profile updated successfully!", "success");
+                               setIsAccountDetailsVisible(false);
+                             } catch (e) {
+                               showAlert("Failed to update profile", "error");
+                             }
+                          }}
+                          className="w-full py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                        >
+                           <Zap className="w-3.5 h-3.5" />
+                           Update Profile
+                        </button>
+                        
+                        <div className="pt-2 mt-2 border-t border-gray-50">
+                          {(activeSession.status === 'connected' || activeSession.status === 'connecting') && (
+                            <button
+                              onClick={() => {
+                                handleDisconnect(activeSession.id, false);
+                                setIsAccountDetailsVisible(false);
+                              }}
+                              className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-500 text-red-600 hover:text-white rounded-2xl transition-all group/disc mb-3"
+                            >
+                               <span className="text-[10px] font-black uppercase tracking-widest">Disconnect Account</span>
+                               <LogOut className="w-4 h-4 group-hover/disc:rotate-12 transition-transform" />
+                            </button>
+                          )}
+                          
+                          <button
+                            onClick={() => {
+                              handleDisconnect(activeSession.id, true);
+                              setIsAccountDetailsVisible(false);
+                            }}
+                            className="w-full py-2 text-center text-[9px] font-black text-slate-300 hover:text-red-600 transition-colors uppercase tracking-widest"
+                          >
+                             Permanently Remove Account
+                          </button>
+                        </div>
+                     </div>
+                  </motion.div>
+                </div>
+              )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -696,24 +929,15 @@ const WhatsAppManagement = () => {
             {activeSession.status === 'connected' && activeSession.id !== primarySessionId && (
               <button
                 onClick={() => handleSetPrimary(activeSession.id)}
-                className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                className="px-6 py-2.5 bg-emerald-600 text-white shadow-xl shadow-emerald-200/50 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" />
-                Set as Primary Account
-              </button>
-            )}
-
-            {(activeSession.status === 'connected' || activeSession.status === 'connecting') && (
-              <button
-                onClick={() => handleDisconnect(activeSession.id, false)}
-                className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg text-xs font-bold hover:bg-red-600 hover:text-white transition-all shadow-sm flex items-center gap-2"
-              >
-                {activeSession.status === 'connected' ? <LogOut className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                {activeSession.status === 'connected' ? 'Disconnect' : 'Cancel Attempt'}
+                Set as Primary
               </button>
             )}
           </div>
         </div>
+        )}
 
 
         <div className="flex-1 p-0 overflow-y-auto scrollbar-hide">
@@ -899,6 +1123,212 @@ const WhatsAppManagement = () => {
                   )}
                 </div>
               </motion.div>
+            ) : activeTab === 'history' ? (
+              <motion.div
+                key="messaging-history"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="w-full max-w-7xl mx-auto p-6 md:p-12 space-y-12"
+              >
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                  <div>
+                    <h3 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Message Intelligence</h3>
+                    <p className="text-sm text-slate-500 font-medium max-w-md">Track delivery, read status, and AI responses across all connected channels in real-time.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex bg-white border border-gray-200 p-1 rounded-xl shadow-sm items-center">
+                       <input 
+                         type="date" 
+                         value={startDate} 
+                         onChange={(e) => setStartDate(e.target.value)}
+                         className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-transparent border-none focus:ring-0 outline-none"
+                       />
+                       <span className="text-slate-300 text-xs">—</span>
+                       <input 
+                         type="date" 
+                         value={endDate} 
+                         onChange={(e) => setEndDate(e.target.value)}
+                         className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-transparent border-none focus:ring-0 outline-none"
+                       />
+                    </div>
+                    <button onClick={fetchHistory} className="p-3 bg-white border border-gray-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
+                       <RefreshCw className={cn("w-5 h-5 text-slate-400", isHistoryLoading && "animate-spin")} />
+                    </button>
+                    <div className="flex bg-white border border-gray-200 p-1 rounded-xl shadow-sm">
+                      {['all', 'broadcast', 'ai'].map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => setHistoryFilter(f)}
+                          className={cn(
+                            "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                            historyFilter === f ? "bg-slate-900 text-white shadow-md scale-105" : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          {f === 'all' ? 'All Logs' : f === 'broadcast' ? 'Campaigns' : 'AI Intel'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {[
+                    { label: 'Total Messages', value: messagesHistory.length, icon: MessageSquare, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                    { label: 'Read Ratio', value: `${Math.round((messagesHistory.filter(m => m.status === 'read').length / (messagesHistory.length || 1)) * 100)}%`, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                    { label: 'Active Campaigns', value: broadcastHistory.length, icon: Zap, color: 'text-amber-600', bg: 'bg-amber-50' },
+                    { label: 'AI Responses', value: messagesHistory.filter(m => m.isAi).length, icon: Bot, color: 'text-indigo-900', bg: 'bg-slate-100' },
+                  ].map((stat, i) => (
+                    <motion.div 
+                      key={i} 
+                      whileHover={{ y: -5 }}
+                      className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm group hover:shadow-xl transition-all"
+                    >
+                      <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", stat.bg, stat.color)}>
+                        <stat.icon className="w-6 h-6" />
+                      </div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{stat.label}</p>
+                      <h4 className="text-2xl font-black text-slate-900">{stat.value}</h4>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Campaign Reports */}
+                  <div className="lg:col-span-1 space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                       <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+                         <BarChart3 className="w-4 h-4 text-amber-500" />
+                         Campaign Reports
+                       </h4>
+                    </div>
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto scrollbar-hide pr-2">
+                       {broadcastHistory.length > 0 ? broadcastHistory.map((b) => (
+                         <div key={b.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:border-amber-200 transition-all">
+                            <div className="flex items-center justify-between mb-4">
+                               <div className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-tighter">Broadcast</div>
+                               <span className="text-[10px] font-bold text-slate-400">{new Date(b.startTime).toLocaleDateString()}</span>
+                            </div>
+                            <h5 className="font-bold text-slate-900 mb-2">Campaign {b.id.slice(-6).toUpperCase()}</h5>
+                            <div className="grid grid-cols-2 gap-4">
+                               <div className="p-3 bg-slate-50 rounded-2xl">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Delivered</p>
+                                  <p className="text-sm font-bold text-emerald-600">{b.successCount}</p>
+                               </div>
+                               <div className="p-3 bg-slate-50 rounded-2xl">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Failed</p>
+                                  <p className="text-sm font-bold text-red-500">{b.failCount}</p>
+                               </div>
+                            </div>
+                            <div className="mt-4 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                               <div 
+                                 className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                                 style={{ width: `${(b.successCount / (b.totalRecipients || 1)) * 100}%` }}
+                               />
+                            </div>
+                         </div>
+                       )) : (
+                         <div className="py-20 text-center bg-white rounded-[2.5rem] border border-gray-100 opacity-50">
+                            <BarChart3 className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                            <p className="text-xs font-bold text-slate-400">No campaigns yet</p>
+                         </div>
+                       )}
+                    </div>
+                  </div>
+
+                  {/* Message Stream */}
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                       <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+                         <MessageSquare className="w-4 h-4 text-indigo-500" />
+                         Live Event Stream
+                       </h4>
+                    </div>
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden min-h-[500px]">
+                      <div className="p-0 overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50/50 border-b border-gray-100">
+                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">From</th>
+                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">To</th>
+                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Message</th>
+                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                              <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {messagesHistory
+                              .filter(m => {
+                                if (historyFilter === 'broadcast') return m.isCampaign;
+                                if (historyFilter === 'ai') return m.isAi;
+                                return true;
+                              })
+                              .filter(m => {
+                                if (!startDate && !endDate) return true;
+                                const msgDate = new Date(m.timestamp).toISOString().split('T')[0];
+                                if (startDate && msgDate < startDate) return false;
+                                if (endDate && msgDate > endDate) return false;
+                                return true;
+                              })
+                              .map((m, i) => (
+                              <tr key={i} className="border-b border-gray-50/50 hover:bg-slate-50/30 transition-colors group">
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500 uppercase">
+                                      {(m.fromNumber || m.remoteJid || '??')?.slice(0, 2)}
+                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-900">{(m.fromNumber || (m.fromMe ? 'System' : m.remoteJid))?.split('@')[0]}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                     <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-[8px] font-bold text-indigo-500 uppercase">
+                                      {(m.toNumber || m.remoteJid || '??')?.slice(0, 2)}
+                                    </div>
+                                    <span className="text-[11px] font-bold text-slate-900">{(m.toNumber || m.remoteJid)?.split('@')[0]}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 max-w-[200px]">
+                                  <p className="text-xs text-slate-500 font-medium truncate group-hover:whitespace-normal transition-all">{m.text}</p>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center justify-center">
+                                    {m.status === 'read' ? (
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        <span className="text-[9px] font-black uppercase tracking-tight">Seen</span>
+                                      </div>
+                                    ) : m.status === 'delivered' ? (
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-400 rounded-lg">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        <span className="text-[9px] font-black uppercase tracking-tight">Delivered</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-400 rounded-lg">
+                                        <Clock className="w-3 h-3" />
+                                        <span className="text-[9px] font-black uppercase tracking-tight">Sent</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  <span className="text-[10px] font-bold text-slate-400">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </td>
+                              </tr>
+                            ))}
+                            {messagesHistory.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="px-6 py-20 text-center italic text-slate-300 text-xs font-medium">No tracking data available yet. Start messaging to see live events.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             ) : activeTab === 'settings' ? (
               <motion.div
                 key="global-settings"
@@ -947,19 +1377,29 @@ const WhatsAppManagement = () => {
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Min Delay (s)</label>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             value={minDelay}
-                            onChange={(e) => setMinDelay(Number(e.target.value))}
-                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm"
+                            onChange={(e) => {
+                               const val = Number(e.target.value.replace(/\D/g, ''));
+                               setMinDelay(val);
+                               if (maxDelay < val) setMaxDelay(val);
+                            }}
+                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Max Delay (s)</label>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             value={maxDelay}
-                            onChange={(e) => setMaxDelay(Number(e.target.value))}
-                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm"
+                            onChange={(e) => {
+                               const val = Number(e.target.value.replace(/\D/g, ''));
+                               if (val >= minDelay) setMaxDelay(val);
+                               else setMaxDelay(minDelay);
+                            }}
+                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       </div>
@@ -967,33 +1407,84 @@ const WhatsAppManagement = () => {
 
                     {/* AI Intelligence Unit */}
                     <div className="space-y-8 pt-8 border-t border-gray-100">
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <Bot className="w-4 h-4 text-amber-500" />
-                        AI Intelligence Unit
-                      </h4>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agent Identity (Name)</label>
-                          <input
-                            type="text"
-                            value={aiAgentName}
-                            onChange={(e) => setAiAgentName(e.target.value)}
-                            placeholder="e.g. Care X-Ray Assistant"
-                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-amber-500/5 font-bold text-sm shadow-sm"
-                          />
-                        </div>
-                        <div className="space-y-4">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Groq Intelligence Key</label>
-                          <input
-                            type="password"
-                            value={groqApiKey}
-                            onChange={(e) => setGroqApiKey(e.target.value)}
-                            placeholder="gsk_..."
-                            className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm shadow-sm"
-                          />
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Bot className="w-4 h-4 text-amber-500" />
+                          AI Intelligence Unit
+                        </h4>
+                        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl border border-gray-200 shadow-sm">
+                           <span className={cn("text-[10px] font-black uppercase tracking-widest transition-colors", globalAiActive ? "text-emerald-600" : "text-slate-400")}>
+                              {globalAiActive ? "Master Agent Active" : "Master Agent Offline"}
+                           </span>
+                           <button 
+                            onClick={() => setGlobalAiActive(!globalAiActive)}
+                            className={cn("w-12 h-6 rounded-full p-1 transition-all duration-300 relative shadow-inner", globalAiActive ? "bg-emerald-500" : "bg-gray-200")}
+                           >
+                            <div className={cn("w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-300", globalAiActive ? "translate-x-6" : "translate-x-0")} />
+                           </button>
                         </div>
                       </div>
+
+                      {globalAiActive && (
+                        <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
+                          <div className="space-y-4">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-indigo-500">Step 1: Activate Bot Channels (Enabled Sessions)</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {sessions.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => {
+                                    const next = activeBotSessions.includes(s.id)
+                                      ? activeBotSessions.filter(id => id !== s.id)
+                                      : [...activeBotSessions, s.id];
+                                    setActiveBotSessions(next);
+                                  }}
+                                  className={cn(
+                                    "p-4 rounded-2xl border text-left transition-all flex items-center gap-3 group relative overflow-hidden",
+                                    activeBotSessions.includes(s.id) 
+                                      ? "bg-indigo-50/50 border-indigo-200 text-indigo-700 shadow-sm" 
+                                      : "bg-white border-gray-100 text-slate-500 hover:border-indigo-100"
+                                  )}
+                                >
+                                  {activeBotSessions.includes(s.id) && (
+                                    <div className="absolute top-0 right-0 w-8 h-8 bg-indigo-500 flex items-center justify-center rounded-bl-xl shadow-sm animate-in fade-in zoom-in">
+                                      <Zap className="w-3 h-3 text-white fill-white" />
+                                    </div>
+                                  )}
+                                  <div className={cn("w-3 h-3 rounded-full", s.status === 'connected' ? "bg-emerald-500 animate-pulse" : "bg-gray-300")} />
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] uppercase font-black tracking-widest opacity-40 leading-none mb-1">Session ID: {s.id.slice(-4)}</span>
+                                    <span className="text-xs font-black tracking-tight">+{s.me?.number || "Syncing..."}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest pl-1">Enable AI for specific WhatsApp connections.</p>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agent Identity (Name)</label>
+                              <input
+                                type="text"
+                                value={aiAgentName}
+                                onChange={(e) => setAiAgentName(e.target.value)}
+                                placeholder="e.g. Care X-Ray Assistant"
+                                className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-amber-500/5 font-bold text-sm shadow-sm"
+                              />
+                            </div>
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Groq Intelligence Key</label>
+                              <input
+                                type="password"
+                                value={groqApiKey}
+                                onChange={(e) => setGroqApiKey(e.target.value)}
+                                placeholder="gsk_..."
+                                className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm shadow-sm"
+                              />
+                            </div>
+                          </div>
+                          {/* rest of AI unit follows ... */}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-4">
@@ -1003,10 +1494,10 @@ const WhatsAppManagement = () => {
                             onChange={(e) => setAiModel(e.target.value)}
                             className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm shadow-sm"
                           >
-                            <option value="llama3-8b-8192">Llama 3 8B (Fast)</option>
-                            <option value="llama3-70b-8192">Llama 3 70B (Smart)</option>
-                            <option value="mixtral-8x7b-32768">Mixtral 8x7B (Deep Knowledge)</option>
-                            <option value="openai/gpt-oss-120b">GPT OSS 120B (Custom Path)</option>
+                            <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Powerful)</option>
+                            <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Fastest)</option>
+                            <option value="mixtral-8x7b-32768">Mixtral 8x7B 32k (Reliable)</option>
+                            <option value="qwen-2.5-72b-instruct">Qwen 2.5 72B (Advanced)</option>
                           </select>
                         </div>
                         <div className="space-y-4">
@@ -1046,35 +1537,78 @@ const WhatsAppManagement = () => {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Active Bot Channels (Multi-Select)</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {sessions.map(s => (
-                            <button
-                              key={s.id}
-                              onClick={() => {
-                                const next = activeBotSessions.includes(s.id)
-                                  ? activeBotSessions.filter(id => id !== s.id)
-                                  : [...activeBotSessions, s.id];
-                                setActiveBotSessions(next);
-                              }}
-                              className={cn(
-                                "p-3 rounded-xl border text-left transition-all flex items-center gap-3",
-                                activeBotSessions.includes(s.id) 
-                                  ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
-                                  : "bg-white border-gray-100 text-slate-500 hover:border-gray-200"
-                              )}
-                            >
-                              <div className={cn("w-2 h-2 rounded-full", s.status === 'connected' ? "bg-emerald-500" : "bg-gray-300")} />
-                              <span className="text-xs font-bold truncate">+{s.me?.number || s.id}</span>
-                              {activeBotSessions.includes(s.id) && <CheckCircle2 className="w-3 h-3 ml-auto text-indigo-500" />}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                        <div className="space-y-4">
+                           <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-200 shadow-sm cursor-pointer hover:border-indigo-200 transition-colors" onClick={() => setTypingSimulation(!typingSimulation)}>
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-sm border", typingSimulation ? "bg-indigo-50 border-indigo-100 text-indigo-500" : "bg-slate-50 border-gray-100 text-slate-400")}>
+                                <Bot className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900">Typing Simulation</h4>
+                                <p className="text-xs text-slate-400 font-medium">Show 'typing' status for better realism</p>
+                              </div>
+                            </div>
+                            <button className={cn("w-12 h-6 rounded-full p-1 transition-all duration-300 relative", typingSimulation ? "bg-indigo-500" : "bg-gray-200")}>
+                              <div className={cn("w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300", typingSimulation ? "translate-x-6" : "translate-x-0")} />
                             </button>
-                          ))}
+                          </div>
+                          
+                          {typingSimulation && (
+                            <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Min Typ (s)</label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={minTyping}
+                                  onChange={(e) => {
+                                     const val = Number(e.target.value.replace(/\D/g, ''));
+                                     setMinTyping(val);
+                                     if (maxTyping < val) setMaxTyping(val);
+                                  }}
+                                  className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-indigo-900/5 font-bold text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Max Typ (s)</label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={maxTyping}
+                                  onChange={(e) => {
+                                     const val = Number(e.target.value.replace(/\D/g, ''));
+                                     if (val >= minTyping) setMaxTyping(val);
+                                     else setMaxTyping(minTyping);
+                                  }}
+                                  className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-indigo-900/5 font-bold text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">Bot will only respond to incoming messages on these enabled sessions.</p>
-                      </div>
-                    </div>
 
+                        <div className="space-y-4">
+                           <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-200 shadow-sm cursor-pointer hover:border-amber-200 transition-colors" onClick={() => setMultiMessageReply(!multiMessageReply)}>
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-sm border", multiMessageReply ? "bg-amber-50 border-amber-100 text-amber-500" : "bg-slate-50 border-gray-100 text-slate-400")}>
+                                <MessageCircle className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900">Multi-message Reply</h4>
+                                <p className="text-xs text-slate-400 font-medium">Combine multiple messages into one reply</p>
+                              </div>
+                            </div>
+                            <button className={cn("w-12 h-6 rounded-full p-1 transition-all duration-300 relative", multiMessageReply ? "bg-amber-500" : "bg-gray-200")}>
+                              <div className={cn("w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300", multiMessageReply ? "translate-x-6" : "translate-x-0")} />
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic ml-1 pt-2">Combines multiple incoming messages received together into a single AI context.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -1122,10 +1656,11 @@ const WhatsAppManagement = () => {
                           <div className="flex items-center gap-2">
                              <span className="text-[10px] font-bold text-slate-400">Idle Days:</span>
                              <input 
-                                type="number" 
+                                type="text" 
+                                inputMode="numeric"
                                 value={churnDays} 
-                                onChange={(e) => setChurnDays(Number(e.target.value))}
-                                className="w-16 px-2 py-1 rounded bg-white border border-gray-200 text-xs font-bold text-center"
+                                onChange={(e) => setChurnDays(Number(e.target.value.replace(/\D/g, '')))}
+                                className="w-16 px-2 py-1 rounded bg-white border border-gray-200 text-xs font-bold text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                              />
                           </div>
                           <button 
@@ -1178,14 +1713,23 @@ const WhatsAppManagement = () => {
                       </div>
                       <h2 className="text-3xl font-bold mb-3 tracking-tight">Connect WhatsApp</h2>
                       <p className="text-slate-500 mb-8 max-w-sm mx-auto">This session is currently offline. Link your device to start using the automated messaging system.</p>
-                      <button
-                        onClick={() => handleConnect()}
-                        disabled={loading}
-                        className="bg-slate-900 text-white px-8 py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 disabled:opacity-50"
-                      >
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Initialize Secure Connection"}
-                      </button>
-                    </div>
+                        <button
+                          onClick={() => handleConnect()}
+                          disabled={loading}
+                          className="bg-slate-900 text-white px-8 py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                        >
+                          {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Initialize Secure Connection"}
+                        </button>
+                        
+                        {loading && (
+                          <button
+                            onClick={() => handleDisconnect(activeSession.id, false)}
+                            className="mt-4 block mx-auto text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500"
+                          >
+                            Cancel Initialization
+                          </button>
+                        )}
+                      </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
                       <div className="text-left space-y-6">
@@ -1267,14 +1811,12 @@ const WhatsAppManagement = () => {
                                   <Phone className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" />
                                   Connect via Phone Number
                                 </button>
-                                <div className="flex flex-col items-center justify-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Token Refreshing Live</span>
-                                  <div className="text-center opacity-30 mt-3 border-t border-gray-100 pt-3">
-                                    <h2 className="text-[9px] font-black tracking-tight uppercase leading-none">Accounts</h2>
-                                    <p className="text-[7px] font-bold uppercase leading-none mt-1">WhatsApp Gateway</p>
-                                  </div>
-                                </div>
+                                <button
+                                  onClick={() => handleDisconnect(activeSession.id, false)}
+                                  className="w-full py-2 text-[10px] font-black text-slate-300 hover:text-red-500 uppercase tracking-[0.2em] transition-colors"
+                                >
+                                  Cancel Connection Setup
+                                </button>
                               </div>
                             </div>
                           ) : (

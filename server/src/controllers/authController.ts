@@ -35,7 +35,21 @@ export const sendOTP = async (req: Request, res: Response) => {
         otpTemplate = `*${branding.name}*\n\nYour secure login OTP is: *${otp}*\n\nPlease do not share this code with anyone. Happy dining! 🍛`;
       }
 
-      await socket.sendMessage(chatId, { text: otpTemplate });
+      const sentMsg = await socket.sendMessage(chatId, { text: otpTemplate });
+      
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+          messageId: sentMsg?.key.id,
+          sessionId: "primary",
+          fromNumber: socket.user?.id.split(':')[0] || "primary",
+          toNumber: chatId,
+          fromMe: true,
+          text: `[OTP] ${otpTemplate.slice(0, 50)}...`,
+          status: "sent",
+          isSystem: true,
+          timestamp: new Date()
+        });
+      }
       res.json({ success: true, message: "OTP sent via WhatsApp", otp }); 
     } catch (err) {
       res.json({ success: true, message: "OTP sent via WhatsApp (Simulated - real failed)", otp });

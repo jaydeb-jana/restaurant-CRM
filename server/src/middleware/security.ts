@@ -4,6 +4,7 @@ import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
 // @ts-ignore
 import xss from 'xss-clean';
+import { env } from '../config/env.config';
 
 export const setupSecurity = (app: any) => {
   // Set security HTTP headers
@@ -11,7 +12,7 @@ export const setupSecurity = (app: any) => {
 
   // CORS configuration
   const corsOptions = {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: env.CLIENT_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

@@ -17,29 +17,36 @@ const INITIAL_DB = {
   }
 };
 
-
 async function seedDatabase() {
   try {
     const db = mongoose.connection.db;
     if (!db) return;
 
     const menuCount = await db.collection("menuItems").countDocuments();
-    if (menuCount === 0) {
-      console.log("Seeding initial database...");
+    if (menuCount === 0 && INITIAL_DB.menuItems.length > 0) {
+      console.log("Seeding initial menu items...");
       await db.collection("menuItems").insertMany(INITIAL_DB.menuItems);
+    }
 
+    const categoryCount = await db.collection("categories").countDocuments();
+    if (categoryCount === 0 && INITIAL_DB.categories.length > 0) {
+      console.log("Seeding initial categories...");
       const categoryDocs = INITIAL_DB.categories.map((name, i) => ({
         id: name.toLowerCase().replace(/\s+/g, '-'),
         name,
         order: i
       }));
       await db.collection("categories").insertMany(categoryDocs);
-
-      await db.collection("tables").insertMany(INITIAL_DB.tables);
-      console.log("Database seeded successfully.");
     }
 
-    // Always sync branding from JSON to DB settings
+    const tableCount = await db.collection("tables").countDocuments();
+    if (tableCount === 0 && INITIAL_DB.tables.length > 0) {
+      console.log("Seeding initial tables...");
+      await db.collection("tables").insertMany(INITIAL_DB.tables);
+    }
+    console.log("Database seed check completed.");
+
+    // Always sync branding from environment to DB settings
     const branding = getBranding();
     await db.collection("settings").updateOne(
       { id: "app-settings" },
@@ -55,8 +62,9 @@ async function seedDatabase() {
 
 export const connectDB = async () => {
   try {
+    console.log(`Attempting to connect to: ${MONGODB_URI.replace(/:([^:@]+)@/, ':****@')}`);
     await mongoose.connect(MONGODB_URI);
-    console.log("Connected to MongoDB successfully locally");
+    console.log(`Connected to MongoDB: ${mongoose.connection.host}`);
     await seedDatabase();
   } catch (err) {
     console.error("Failed to connect to MongoDB:", err);

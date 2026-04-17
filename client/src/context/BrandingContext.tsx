@@ -20,15 +20,15 @@ export interface BrandingConfig {
 }
 
 export const staticBranding: BrandingConfig = {
-  name: "Jaydevb Kraft",
-  shortName: "JaydevbKraft",
+  name: import.meta.env.VITE_APP_NAME || "Jaydevb Kraft",
+  shortName: import.meta.env.VITE_APP_SHORT_NAME || "JaydevbKraft",
   description: "Premium Restaurant CRM & Management System",
   logo: "/assets/images/logo.png",
   favicon: "/favicon.ico",
-  copyright: "© 2024 Jaydevb Kraft. All rights reserved.",
+  copyright: `© ${new Date().getFullYear()} ${import.meta.env.VITE_APP_NAME || "Jaydevb Kraft"}. All rights reserved.`,
   contact: {
-    email: "hello@jaydevbkraft.com",
-    phone: "+91 98765 43210",
+    email: import.meta.env.VITE_APP_EMAIL || "hello@jaydevbkraft.com",
+    phone: import.meta.env.VITE_APP_PHONE || "+91 98765 43210",
     address: "123 Food Street, Culinary City, PIN 123456"
   },
   socials: {

@@ -6,7 +6,14 @@ import getBranding from "../config/branding";
 export const getCollection = async (req: Request, res: Response) => {
   try {
     const { collection } = req.params;
-    const data = await mongoose.connection.db?.collection(collection).find({}).toArray();
+    let query = mongoose.connection.db?.collection(collection).find({});
+    
+    // Auto-sort by timestamp or createdAt if available
+    if (collection === "whatsapp_messages" || collection === "broadcast_history") {
+      query = query?.sort({ timestamp: -1 });
+    }
+
+    const data = await query?.toArray();
     const formatted = data?.map(doc => {
       const { _id, ...rest } = doc;
       return rest;

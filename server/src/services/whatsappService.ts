@@ -50,7 +50,22 @@ export class WhatsAppService {
       messageContent = { text: message };
     }
 
-    await socket.sendMessage(chatId, messageContent);
+    const sentMsg = await socket.sendMessage(chatId, messageContent);
+    const myNumber = session?.me?.number || id;
+    
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+        messageId: sentMsg?.key.id,
+        sessionId: id,
+        fromNumber: myNumber, // Outgoing: From is our account
+        toNumber: chatId,     // Outgoing: To is the remote user
+        fromMe: true,
+        text: message || (media ? "[Media Message]" : ""),
+        status: "sent",
+        timestamp: new Date()
+      });
+    }
+    
     return { success: true };
   }
 
@@ -121,7 +136,24 @@ export class WhatsAppService {
           messageContent = { text: randomMessage };
         }
 
-        await socket.sendMessage(chatId, messageContent);
+        const sentMsg = await socket.sendMessage(chatId, messageContent);
+        const myNumber = session?.me?.number || id;
+        
+        if (mongoose.connection.readyState === 1) {
+          await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+            messageId: sentMsg?.key.id,
+            sessionId: id,
+            fromNumber: myNumber,
+            toNumber: chatId,
+            fromMe: true,
+            text: randomMessage || (media ? "[Media Message]" : ""),
+            status: "sent",
+            isCampaign: true,
+            campaignId: broadcastId,
+            timestamp: new Date()
+          });
+        }
+
         const result = { phone, status: "success", timestamp: new Date() };
         results.push(result);
         historyEntry.successCount++;
