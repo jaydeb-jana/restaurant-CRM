@@ -2,7 +2,6 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore,
   jidDecode,
   WAMessageStubType,
   WASocket,
@@ -315,13 +314,13 @@ class WhatsAppSessionManager {
 
             // 6. Multimedia Handling (Vision & Transcription)
             if (msg.message?.audioMessage && groqKey) {
-              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reauthoriseNetworkQueries: true }) as Buffer;
+              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger }) as Buffer;
               const transcript = await this.transcribeAudio(buffer, groqKey);
               if (transcript) fullUserText = `[VOICE_MSG]: "${transcript}"`;
             }
 
             if (msg.message?.imageMessage && groqKey) {
-              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reauthoriseNetworkQueries: true }) as Buffer;
+              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger }) as Buffer;
               const analysis = await this.analyzeMedia(buffer, "Analyze this image accurately for the assistant.", groqKey);
               if (analysis) fullUserText += `\n[IMAGE_SENT]: ${analysis}`;
             }
@@ -391,7 +390,12 @@ class WhatsAppSessionManager {
                 if (responseMedia.type === 'image') {
                   sentMsg = await socket.sendMessage(sender, { image: mediaOptions, caption: brandedText });
                 } else {
-                  sentMsg = await socket.sendMessage(sender, { document: mediaOptions, fileName: "document", caption: brandedText });
+                  sentMsg = await socket.sendMessage(sender, { 
+                    document: mediaOptions, 
+                    mimetype: "application/octet-stream",
+                    fileName: "document", 
+                    caption: brandedText 
+                  });
                 }
               } else {
                 sentMsg = await socket.sendMessage(sender, { text: brandedText });

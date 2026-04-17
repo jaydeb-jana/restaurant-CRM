@@ -96,3 +96,5 @@
 {"level":"error","message":"500 - read ECONNRESET - /api/v1/whatsapp/customers - GET - ::ffff:127.0.0.1"}
 {"level":"error","message":"500 - read ECONNRESET - /api/v1/whatsapp/customers - GET - ::1"}
 {"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-02.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
+{"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-00.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
+{"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-00.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
