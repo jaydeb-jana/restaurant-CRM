@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import getBranding from "../config/branding";
+import getBranding from "../config/branding.js";
 
 import { 
   getPrimaryStatus, 
   getPrimarySocket as getPrimaryClient, 
   formatPhoneForWhatsApp 
-} from "../config/whatsapp";
+} from "../config/whatsapp.js";
 
 export const sendOTP = async (req: Request, res: Response, next: NextFunction) => {
   const { phone } = req.body;

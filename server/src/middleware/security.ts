@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
-import { env } from '../config/env.config';
+import { env } from '../config/env.config.js';
 
 export const setupSecurity = (app: Application) => {
   // Set security HTTP headers

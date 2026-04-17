@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { WhatsAppService } from "../services/whatsappService";
-import { whatsappManager } from "../config/whatsapp";
+import { WhatsAppService } from "../services/whatsappService.js";
+import { whatsappManager } from "../config/whatsapp.js";
 
 export const getStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {

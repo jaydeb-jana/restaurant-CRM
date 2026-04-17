@@ -17,7 +17,7 @@ export interface BrandingConfig {
   };
 }
 
-import { env } from "./env.config";
+import { env } from "./env.config.js";
 
 export const branding: BrandingConfig = {
   name: env.APP_NAME,

@@ -1,4 +1,4 @@
-import { whatsappManager, formatPhoneForWhatsApp } from "../config/whatsapp";
+import { whatsappManager, formatPhoneForWhatsApp } from "../config/whatsapp.js";
 import mongoose from "mongoose";
 
 export class WhatsAppService {

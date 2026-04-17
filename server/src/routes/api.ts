@@ -1,11 +1,11 @@
 import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
-import * as dbController from "../controllers/dbController";
-import * as whatsappController from "../controllers/whatsappController";
-import * as authController from "../controllers/authController";
+import * as dbController from "../controllers/dbController.js";
+import * as whatsappController from "../controllers/whatsappController.js";
+import * as authController from "../controllers/authController.js";
 
-import { getBranding } from "../config/branding";
+import { getBranding } from "../config/branding.js";
 
 
 const router = Router();

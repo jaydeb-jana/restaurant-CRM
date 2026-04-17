@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import getBranding from "./branding";
-import { env } from "./env.config";
+import getBranding from "./branding.js";
+import { env } from "./env.config.js";
 
 const MONGODB_URI = env.MONGODB_URI;
 

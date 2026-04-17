@@ -1,12 +1,12 @@
 import express, { Request, Response, Application } from "express";
 import "module-alias/register";
-import { connectDB } from "./config/db";
-import { initWhatsApp } from "./config/whatsapp";
-import apiRoutes from "./routes/api";
-import { setupSecurity } from "./middleware/security";
-import { errorHandler } from "./middleware/errorHandler";
-import { env } from "./config/env.config";
-import getBranding from "./config/branding";
+import { connectDB } from "./config/db.js";
+import { initWhatsApp } from "./config/whatsapp.js";
+import apiRoutes from "./routes/api.js";
+import { setupSecurity } from "./middleware/security.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { env } from "./config/env.config.js";
+import getBranding from "./config/branding.js";
 
 async function startServer() {
 

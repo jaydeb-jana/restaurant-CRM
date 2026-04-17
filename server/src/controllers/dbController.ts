@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import getBranding from "../config/branding";
+import getBranding from "../config/branding.js";
 
 
 export const getCollection = async (req: Request, res: Response, next: NextFunction) => {
