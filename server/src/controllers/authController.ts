@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import getBranding from "../config/branding";
 
@@ -8,7 +8,7 @@ import {
   formatPhoneForWhatsApp 
 } from "../config/whatsapp";
 
-export const sendOTP = async (req: Request, res: Response) => {
+export const sendOTP = async (req: Request, res: Response, next: NextFunction) => {
   const { phone } = req.body;
   const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Real random OTP
   console.log(`Sending OTP ${otp} to ${phone}`);
@@ -59,7 +59,7 @@ export const sendOTP = async (req: Request, res: Response) => {
   }
 };
 
-export const verifyOTP = async (req: Request, res: Response) => {
+export const verifyOTP = async (req: Request, res: Response, next: NextFunction) => {
   const { phone, otp } = req.body;
   try {
     let cleanedPhone = phone.replace(/\D/g, "");

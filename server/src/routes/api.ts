@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import * as dbController from "../controllers/dbController";
@@ -11,7 +11,7 @@ import { getBranding } from "../config/branding";
 const router = Router();
 
 // Health check
-router.get("/health", (req, res) => {
+router.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 

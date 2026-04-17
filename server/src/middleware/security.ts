@@ -1,12 +1,12 @@
+import { Application } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
-// @ts-ignore
 import xss from 'xss-clean';
 import { env } from '../config/env.config';
 
-export const setupSecurity = (app: any) => {
+export const setupSecurity = (app: Application) => {
   // Set security HTTP headers
   app.use(helmet());
 

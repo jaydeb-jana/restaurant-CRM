@@ -1,9 +1,9 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import getBranding from "../config/branding";
 
 
-export const getCollection = async (req: Request, res: Response) => {
+export const getCollection = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { collection } = req.params;
     let query = mongoose.connection.db?.collection(collection).find({});
@@ -24,7 +24,7 @@ export const getCollection = async (req: Request, res: Response) => {
   }
 };
 
-export const createItem = async (req: Request, res: Response) => {
+export const createItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { collection } = req.params;
     const { id, ...data } = req.body;
@@ -48,7 +48,7 @@ export const createItem = async (req: Request, res: Response) => {
   }
 };
 
-export const updateItem = async (req: Request, res: Response) => {
+export const updateItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { collection, id } = req.params;
     const updateResult = await mongoose.connection.db?.collection(collection).findOneAndUpdate(
@@ -67,7 +67,7 @@ export const updateItem = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteItem = async (req: Request, res: Response) => {
+export const deleteItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { collection, id } = req.params;
     await mongoose.connection.db?.collection(collection).deleteOne({ id });
@@ -77,7 +77,7 @@ export const deleteItem = async (req: Request, res: Response) => {
   }
 };
 
-export const getSettings = async (req: Request, res: Response) => {
+export const getSettings = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
     
@@ -100,7 +100,7 @@ export const getSettings = async (req: Request, res: Response) => {
   }
 };
 
-export const updateSettings = async (req: Request, res: Response) => {
+export const updateSettings = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const updateResult = await mongoose.connection.db?.collection("settings").findOneAndUpdate(
       { id: "app-settings" },

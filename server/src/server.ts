@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, Application } from "express";
 import "module-alias/register";
 import { connectDB } from "./config/db";
 import { initWhatsApp } from "./config/whatsapp";
@@ -10,7 +10,7 @@ import getBranding from "./config/branding";
 
 async function startServer() {
 
-  const app = express();
+  const app: Application = express();
   const PORT = env.PORT || 3000;
 
   // Security Hardening
@@ -29,7 +29,7 @@ async function startServer() {
   app.use("/api/v1", apiRoutes);
 
   // Health check
-  app.get("/health", (req, res) => {
+  app.get("/health", (req: Request, res: Response) => {
     res.json({ 
       success: true, 
       status: "up", 
