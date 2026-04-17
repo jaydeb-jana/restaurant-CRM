@@ -101,7 +101,7 @@ class WhatsAppSessionManager {
   private async transcribeAudio(buffer: Buffer, apiKey: string): Promise<string> {
     try {
       const formData = new FormData();
-      const blob = new Blob([buffer], { type: 'audio/mp4' });
+      const blob = new Blob([new Uint8Array(buffer)], { type: 'audio/mp4' });
       formData.append('file', blob, 'voice.m4a');
       formData.append('model', 'whisper-large-v3');
 
@@ -314,13 +314,13 @@ class WhatsAppSessionManager {
 
             // 6. Multimedia Handling (Vision & Transcription)
             if (msg.message?.audioMessage && groqKey) {
-              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger }) as Buffer;
+              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: socket.updateMediaMessage }) as Buffer;
               const transcript = await this.transcribeAudio(buffer, groqKey);
               if (transcript) fullUserText = `[VOICE_MSG]: "${transcript}"`;
             }
 
             if (msg.message?.imageMessage && groqKey) {
-              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger }) as Buffer;
+              const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: socket.updateMediaMessage }) as Buffer;
               const analysis = await this.analyzeMedia(buffer, "Analyze this image accurately for the assistant.", groqKey);
               if (analysis) fullUserText += `\n[IMAGE_SENT]: ${analysis}`;
             }
