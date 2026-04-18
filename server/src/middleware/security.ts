@@ -19,9 +19,14 @@ export const setupSecurity = (app: Application) => {
   // };
   // app.use(cors(corsOptions));
   
-  // Temporarily allow all origins
+  // Temporarily allow all origins, but explicitly include the live site
   app.use(cors({
-    origin: true,
+    origin: [
+      env.CLIENT_URL, 
+      "https://restaurant-crm-1-lg0o.onrender.com",
+      "http://localhost:5173",
+      "http://localhost:5174"
+    ],
     credentials: true
   }));
 

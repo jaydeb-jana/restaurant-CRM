@@ -1,5 +1,4 @@
 import express, { Request, Response, Application } from "express";
-import "module-alias/register";
 import { connectDB } from "./config/db.js";
 import { initWhatsApp } from "./config/whatsapp.js";
 import apiRoutes from "./routes/api.js";
