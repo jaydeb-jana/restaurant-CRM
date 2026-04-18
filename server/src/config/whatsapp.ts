@@ -17,7 +17,7 @@ import mongoose from "mongoose";
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 
-const logger = pino({ level: "silent" });
+const logger = pino({ level: "info" });
 
 // Helper for formatting WhatsApp numbers
 export const formatPhoneForWhatsApp = (phone: string) => {
@@ -68,20 +68,19 @@ class WhatsAppSessionManager {
 
       const savedSessions = await mongoose.connection.db?.collection("whatsapp_sessions").find({}).toArray();
 
-      // Ensure primary session is always in statuses
-      this.updateStatus(this.primarySessionId, { id: this.primarySessionId, status: "disconnected", qr: null, me: null });
-
       if (savedSessions) {
         for (const s of savedSessions) {
           this.updateStatus(s.sessionId, { id: s.sessionId, status: "disconnected", qr: null, me: s.me || null });
-
-          // Auto-start sessions that were previously connected or the primary session
-          if (s.me || s.sessionId === this.primarySessionId) {
-            console.log(`Auto-starting session: ${s.sessionId}`);
-            this.initSession(s.sessionId).catch(err => console.error(`Failed to auto-start ${s.sessionId}:`, err));
-          }
         }
       }
+
+      // Ensure primary is in status map and auto-start it
+      if (!this.statuses.has(this.primarySessionId)) {
+        this.updateStatus(this.primarySessionId, { id: this.primarySessionId, status: "disconnected", qr: null, me: null });
+      }
+      
+      console.log(`Auto-starting session: ${this.primarySessionId}`);
+      this.initSession(this.primarySessionId).catch(err => console.error(`Failed to auto-start ${this.primarySessionId}:`, err));
     } catch (err) {
       console.error("Error loading WhatsApp sessions:", err);
     }
@@ -184,14 +183,15 @@ class WhatsAppSessionManager {
       if (qr) this.updateStatus(id, { qr: qr, status: "connecting" });
 
       if (connection === "close") {
-        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log(`[WhatsApp] Session ${id} closed. Reconnecting: ${shouldReconnect}`);
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        console.log(`[WhatsApp] Session ${id} closed. Reason: ${statusCode}. Reconnecting: ${shouldReconnect}`);
 
         this.updateStatus(id, { status: "disconnected", qr: null });
         this.sockets.delete(id);
 
         if (shouldReconnect) {
-          this.initSession(id);
+          setTimeout(() => this.initSession(id), 5000);
         } else {
           if (mongoose.connection.readyState === 1) {
             await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
