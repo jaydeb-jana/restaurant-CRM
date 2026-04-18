@@ -11,13 +11,19 @@ export const setupSecurity = (app: Application) => {
   app.use(helmet());
 
   // CORS configuration
-  const corsOptions = {
-    origin: env.CLIENT_URL,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  };
-  app.use(cors(corsOptions));
+  // const corsOptions = {
+  //   origin: env.CLIENT_URL,
+  //   credentials: true,
+  //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  //   allowedHeaders: ['Content-Type', 'Authorization'],
+  // };
+  // app.use(cors(corsOptions));
+  
+  // Temporarily allow all origins
+  app.use(cors({
+    origin: true,
+    credentials: true
+  }));
 
   // Limit requests from same API
   const limiter = rateLimit({
