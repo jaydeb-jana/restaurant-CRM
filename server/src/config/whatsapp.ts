@@ -16,6 +16,11 @@ import fs from "fs";
 import mongoose from "mongoose";
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
+// Import New Professional Models
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
+import WhatsAppContact from "../models/WhatsAppContact.js";
+import WhatsAppMessage from "../models/WhatsAppMessage.js";
+
 
 const logger = pino({ level: "info" });
 
@@ -35,6 +40,7 @@ export interface WhatsAppSession {
   id: string;
   status: "disconnected" | "connecting" | "connected";
   qr: string | null;
+  error?: string | null;
   me: {
     name: string;
     number: string;
@@ -46,10 +52,10 @@ class WhatsAppSessionManager {
   private sockets: Map<string, WASocket> = new Map();
   private statuses: Map<string, WhatsAppSession> = new Map();
   private typingPresence: Map<string, Set<string>> = new Map();
+  private manualDisconnections = new Set<string>();
   private stopFlags: Map<string, Set<string>> = new Map();
   private botTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private pendingMessages: Map<string, string[]> = new Map();
-  private primarySessionId: string = "primary";
   private sessionsDir = path.join(process.cwd(), "whatsapp_sessions_auth");
 
   constructor() {
@@ -58,43 +64,134 @@ class WhatsAppSessionManager {
     }
   }
 
+  public async asyncCleanupGhostFolders() {
+    if (mongoose.connection.readyState !== 1) return;
+    try {
+      const dbSessions = await WhatsAppAccount.find({}).lean();
+      const dbSessionIds = new Set(dbSessions?.map(s => s.sessionId) || []);
+      
+      if (fs.existsSync(this.sessionsDir)) {
+        const folders = fs.readdirSync(this.sessionsDir);
+        for (const folder of folders) {
+          const fullPath = path.join(this.sessionsDir, folder);
+          const dbMatch = dbSessions?.find(s => s.sessionId === folder);
+          if (!dbSessionIds.has(folder) || !dbMatch?.phoneNumber) {
+            console.log(`[Startup Cleanup] Purging orphan auth folder: ${folder}`);
+            fs.rmSync(fullPath, { recursive: true, force: true });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Ghost folder cleanup failed:", err);
+    }
+  }
+
   public async loadSessions() {
     if (mongoose.connection.readyState !== 1) return;
     try {
-      const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
-      if (settings?.primaryWhatsAppId) {
-        this.primarySessionId = settings.primaryWhatsAppId;
-      }
+      // First, clean up orphaned folders on disk
+      await this.asyncCleanupGhostFolders();
 
-      const savedSessions = await mongoose.connection.db?.collection("whatsapp_sessions").find({}).toArray();
+      const savedSessions = await WhatsAppAccount.find({}).lean();
 
       if (savedSessions) {
         for (const s of savedSessions) {
-          this.updateStatus(s.sessionId, { id: s.sessionId, status: "disconnected", qr: null, me: s.me || null });
+          if (!s.phoneNumber || s.status !== 'connected') {
+            console.log(`[Startup] Skipping/Removing unlinked or stale DB session: ${s.sessionId}`);
+            if (s.status !== 'connected') await WhatsAppAccount.deleteOne({ sessionId: s.sessionId });
+            continue;
+          }
+
+          this.updateStatus(s.sessionId, { id: s.sessionId, status: "disconnected", qr: null, me: s.me as any });
+          console.log(`Auto-starting linked session: ${s.sessionId} (${s.phoneNumber})`);
+          this.initSession(s.sessionId).catch(err => console.error(`Failed to auto-start ${s.sessionId}:`, err));
         }
       }
-
-      // Ensure primary is in status map and auto-start it
-      if (!this.statuses.has(this.primarySessionId)) {
-        this.updateStatus(this.primarySessionId, { id: this.primarySessionId, status: "disconnected", qr: null, me: null });
-      }
-      
-      console.log(`Auto-starting session: ${this.primarySessionId}`);
-      this.initSession(this.primarySessionId).catch(err => console.error(`Failed to auto-start ${this.primarySessionId}:`, err));
     } catch (err) {
       console.error("Error loading WhatsApp sessions:", err);
     }
   }
 
-  public async setPrimary(id: string) {
-    this.primarySessionId = id;
+  public async cleanupUnlinkedSessions() {
+    try {
+      console.log("[Cleanup] Starting aggressive purge of unlinked/phantom sessions...");
+
+      // 1. Memory Cleanup
+      const currentIds = Array.from(this.statuses.keys());
+      for (const id of currentIds) {
+        const session = this.statuses.get(id);
+        const socket = this.sockets.get(id);
+        
+        // Purge if no identity link exists AND session is not actively connecting
+        if (!session || (!session.me?.number && session.status !== 'connecting')) {
+          console.log(`[Manual Cleanup] Purging in-memory session: ${id}`);
+          if (socket) {
+             try { socket.end(undefined); } catch(e) {}
+             this.sockets.delete(id);
+          }
+          this.statuses.delete(id);
+          
+          // Filesystem Cleanup
+          const authDir = path.join(this.sessionsDir, id);
+          if (fs.existsSync(authDir)) {
+             fs.rmSync(authDir, { recursive: true, force: true });
+          }
+        }
+      }
+
+      // 2. Extra Filesystem Guard: Remove folders not in Statuses (since we just cleaned statuses)
+      if (fs.existsSync(this.sessionsDir)) {
+        const folders = fs.readdirSync(this.sessionsDir);
+        for (const f of folders) {
+          if (!this.statuses.has(f)) {
+            // Check if this folder being removed was actually a connecting one we just kept
+            // (already handled by the loop above keeping it in this.statuses)
+            fs.rmSync(path.join(this.sessionsDir, f), { recursive: true, force: true });
+          }
+        }
+      }
+
+      // 3. Database Cleanup
+      if (mongoose.connection.readyState === 1) {
+        const result = await WhatsAppAccount.deleteMany({
+          status: { $ne: 'connected' },
+          phoneNumber: { $exists: false }
+        });
+        console.log(`[Auto-Cleanup] Purged ${result.deletedCount} ghost sessions from DB`);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error("Manual cleanup failed:", err);
+      throw err;
+    }
+  }
+
+  public async registerSession(id: string) {
+    if (this.statuses.size >= 10) {
+      throw new Error("Maximum 10 concurrent sessions allowed. Please delete unused slots.");
+    }
+
+    // Save placeholder to DB to prevent memory purge
     if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.db?.collection("settings").updateOne(
-        { id: "app-settings" },
-        { $set: { primaryWhatsAppId: id } },
+      await WhatsAppAccount.findOneAndUpdate(
+        { sessionId: id },
+        { 
+          $set: { 
+            sessionId: id, 
+            status: "disconnected", 
+            isActive: true 
+          } 
+        },
         { upsert: true }
       );
     }
+
+    const status: WhatsAppSession = { id, status: "disconnected", qr: null, me: null };
+    this.statuses.set(id, status);
+    console.log(`[Session] Registered in memory and database: ${id}`);
+
+    return status;
   }
 
   private async transcribeAudio(buffer: Buffer, apiKey: string): Promise<string> {
@@ -155,26 +252,57 @@ class WhatsAppSessionManager {
   }
 
   public async initSession(id: string) {
-    if (this.sockets.has(id)) return;
-    if (this.statuses.get(id)?.status === "connecting") return;
+    if (this.sockets.has(id)) {
+      console.log(`[WhatsApp] Force closing existing socket for ${id} before re-init.`);
+      try { this.sockets.get(id)?.end(undefined); } catch (e) {}
+      this.sockets.delete(id);
+    }
+    if (this.statuses.get(id)?.status === "connecting") {
+       // Allow a restart if requested explicitly
+       console.log(`[WhatsApp] Restarting connecting session: ${id}`);
+    }
 
-    this.updateStatus(id, { id, status: "connecting", qr: null, me: null });
+    this.updateStatus(id, { id, status: "connecting", qr: null, me: null, error: null });
 
-    const authDir = path.join(this.sessionsDir, id);
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    // Move the heavy async work out of the main request path if possible, or ensure it's logged
+    const startHandshake = async () => {
+      try {
+        if (!this.sockets) this.sockets = new Map();
+        
+        const authDir = path.join(this.sessionsDir, id);
+        const { state, saveCreds } = await useMultiFileAuthState(authDir);
+        
+        // Fetch latest version instead of hardcoding
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`[WhatsApp] Initializing session ${id} using Baileys v${version.join('.')} (isLatest: ${isLatest})`);
 
-    const socket = makeWASocket({
-      version,
-      printQRInTerminal: false,
-      auth: state,
-      logger,
-      browser: ["Ubuntu", "Chrome", "20.0.04"],
-      markOnlineOnConnect: true,
-    });
+        const socket = makeWASocket({
+          version,
+          printQRInTerminal: false,
+          auth: state,
+          logger,
+          browser: ['Arventa Ventures', '(Meta Verified)', '1.0.0'],
+          markOnlineOnConnect: true,
+          connectTimeoutMs: 60000, // Increased timeout
+          keepAliveIntervalMs: 30000,
+        });
 
-    this.sockets.set(id, socket);
+        this.sockets.set(id, socket);
+        
+        // Setup listeners...
+        this.setupSocketListeners(id, socket, saveCreds);
+        
+      } catch (err) {
+        console.error(`[WhatsApp] Failed to start handshake for ${id}:`, err);
+        this.updateStatus(id, { status: "disconnected", error: "Handshake failed. Ensure your internet is stable." });
+      }
+    };
 
+    startHandshake(); // DO NOT AWAIT - return to client immediately
+    return { success: true };
+  }
+
+  private setupSocketListeners(id: string, socket: WASocket, saveCreds: () => Promise<void>) {
     socket.ev.on("creds.update", saveCreds);
 
     socket.ev.on("connection.update", async (update) => {
@@ -190,37 +318,81 @@ class WhatsAppSessionManager {
         this.updateStatus(id, { status: "disconnected", qr: null });
         this.sockets.delete(id);
 
-        if (shouldReconnect) {
+        if (shouldReconnect && !this.manualDisconnections.has(id)) {
           setTimeout(() => this.initSession(id), 5000);
         } else {
-          if (mongoose.connection.readyState === 1) {
-            await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
-              { sessionId: id },
-              { $set: { me: null } }
-            );
-          }
-          fs.rmSync(authDir, { recursive: true, force: true });
-          this.updateStatus(id, { me: null, status: "disconnected" });
+          // Permanent logout or manual disconnect
+          this.manualDisconnections.delete(id);
+          this.updateStatus(id, { status: "disconnected", qr: null });
+          console.log(`[WhatsApp] Session ${id} logged out or manual disconnect completed.`);
         }
       } else if (connection === "open") {
+        if (this.manualDisconnections.has(id)) {
+          console.log(`[Security] Connection opened for session ${id} but it's marked for manual disconnection. Terminating.`);
+          socket.logout().catch(console.error);
+          return;
+        }
         console.log(`[WhatsApp] Session ${id} connected successfully.`);
-        const user = socket.user!;
+        const myUser = socket.user!;
+        const myNumber = myUser.id.split(":")[0] || "";
         const me: any = {
-          name: user.name || "Business Account",
-          number: user.id.split(":")[0] || ""
+          name: myUser.name || "Business Account",
+          number: myNumber
         };
 
+        // Duplicate Check: See if this number is already used by another session in DATABASE
+        if (mongoose.connection.readyState === 1) {
+          const dbDuplicate = await WhatsAppAccount.findOne({ 
+            phoneNumber: myNumber,
+            sessionId: { $ne: id },
+            status: 'connected'
+          });
+
+          if (dbDuplicate) {
+            // Check if that session is actually active in our current process
+            const isActiveLocally = this.sockets.has(dbDuplicate.sessionId);
+            
+            if (isActiveLocally) {
+              console.log(`[Security] Real Duplicate conflict! Number ${myNumber} is active in session ${dbDuplicate.sessionId}.`);
+              await socket.logout();
+              this.updateStatus(id, { 
+                status: "disconnected", 
+                qr: null, 
+                me: null, 
+                error: `Duplicate Link Conflict: Number +${myNumber} is already connected to session "${dbDuplicate.sessionId}".` 
+              });
+              return;
+            } else {
+              // It's a "Ghost" session in DB - clean it up and allow current connection
+              console.log(`[Security] Ghost session ${dbDuplicate.sessionId} detected for number ${myNumber}. Purging database record...`);
+              await WhatsAppAccount.updateOne(
+                { sessionId: dbDuplicate.sessionId },
+                { $set: { status: 'disconnected', isActive: false } }
+              );
+              // Fall through to normal connection logic
+            }
+          }
+        }
+
         try {
-          const ppUrl = await socket.profilePictureUrl(user.id);
+          const ppUrl = await socket.profilePictureUrl(myUser.id);
           if (ppUrl) me.profilePic = ppUrl;
         } catch (e) {}
 
-        this.updateStatus(id, { status: "connected", qr: null, me });
+        this.updateStatus(id, { status: "connected", qr: null, me, error: null });
 
         if (mongoose.connection.readyState === 1) {
-          await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
+          await WhatsAppAccount.findOneAndUpdate(
             { sessionId: id },
-            { $set: { sessionId: id, lastSeen: new Date(), me } },
+            { 
+              $set: { 
+                status: 'connected', 
+                lastSeen: new Date(), 
+                me, 
+                phoneNumber: myNumber,
+                name: me.name
+              } 
+            },
             { upsert: true }
           );
         }
@@ -230,6 +402,9 @@ class WhatsAppSessionManager {
     // Integrated Listener: Logging + AI Orchestration
     socket.ev.on("messages.upsert", async (m) => {
       if (m.type !== "notify") return;
+      
+      // Fetch settings once for efficiency and to avoid ReferenceErrors inside the loop
+      const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
 
       for (const msg of m.messages) {
         if (!msg.message || msg.key.fromMe) continue;
@@ -237,32 +412,95 @@ class WhatsAppSessionManager {
         const sender = msg.key.remoteJid;
         if (!sender) continue;
 
-        // 1. Data Capture
+        // 1. Data Capture & Professional Filtering
         const incomingText = msg.message?.conversation || 
                              msg.message?.extendedTextMessage?.text || 
                              msg.message?.imageMessage?.caption || "";
         
         const session = this.getSession(id);
+        const myFullJid = socket.user?.id.split(':')[0] + "@s.whatsapp.net";
         const myNumber = session?.me?.number || id;
+
+        // STRICT SELF-MESSAGE FILTER
+        if (sender === myFullJid) {
+          console.log(`[Gatekeeper] Ignored self-message on ${id}`);
+          continue;
+        }
         
         if (mongoose.connection.readyState === 1) {
-          await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+          const customerNumber = sender.split('@')[0];
+          const senderName = msg.pushName || "Unknown Customer";
+
+          // Log message professionally
+          await WhatsAppMessage.create({
             messageId: msg.key.id,
             sessionId: id,
-            fromNumber: sender, 
-            toNumber: myNumber,
-            fromMe: false,
+            from: sender, 
+            to: myFullJid,
             text: incomingText,
+            senderType: "customer",
             status: "delivered",
             timestamp: new Date()
           });
+
+          // Sync Contact & Increment Incoming Counter
+          const contact = await WhatsAppContact.findOneAndUpdate(
+            { phoneNumber: customerNumber, linkedTo: myNumber },
+            {
+              $set: { 
+                name: senderName,
+                lastMessage: incomingText.substring(0, 100),
+                lastInteraction: new Date()
+              },
+              $inc: { totalIncoming: 1, messageCounter: 1 }
+            },
+            { upsert: true, new: true }
+          );
+
+          // 3. Recursive Summarization Trigger
+          const frequency = settings?.summarizationFrequency || 10;
+          if (contact && settings?.useAllContext && contact.messageCounter % frequency === 0 && settings?.groqApiKey) {
+            this.summarizeContext(customerNumber, myNumber, settings.groqApiKey).catch(console.error);
+          }
         }
 
         // 2. AI Intelligence Gatekeeping
         if (sender.endsWith("@g.us")) continue; // Skip Groups
 
-        const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
         if (!settings || !settings.globalAiActive) continue;
+
+        // --- AI Schedule Logic ---
+        const now = new Date();
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const currentDay = days[now.getDay()];
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+
+        const schedule = settings.aiSchedule;
+        let isScheduledActive = true;
+
+        if (schedule && !schedule.alwaysOn) {
+          const dayConfig = schedule.weekly?.[currentDay];
+          if (dayConfig) {
+            if (!dayConfig.active) {
+              isScheduledActive = false;
+            } else {
+              const [startH, startM] = (dayConfig.from || "00:00").split(':').map(Number);
+              const [endH, endM] = (dayConfig.to || "23:59").split(':').map(Number);
+              const startTime = startH * 60 + startM;
+              const endTime = endH * 60 + endM;
+
+              if (currentTime < startTime || currentTime > endTime) {
+                isScheduledActive = false;
+              }
+            }
+          }
+        }
+
+        if (!isScheduledActive) {
+          console.log(`[Bot] Skipping ${sender}: Outside of active schedule.`);
+          continue;
+        }
+        // -------------------------
         
         const activeSessions = settings.activeBotSessions || [];
         if (!activeSessions.includes(id)) {
@@ -326,24 +564,70 @@ class WhatsAppSessionManager {
             }
 
             // 7. Intelligence Engine (Groq Cloud)
-            const [pairs, kbData] = await Promise.all([
+            const customerNumber = sender.split('@')[0];
+            const [pairs, kbData, history, contactData] = await Promise.all([
               mongoose.connection.db?.collection("ai_agent").find({}).toArray(),
-              mongoose.connection.db?.collection("ai_knowledge").find({ id: "main_kb" }).toArray()
+              mongoose.connection.db?.collection("ai_knowledge").find({ id: "main_kb" }).toArray(),
+              settings.useContextHistory ? 
+                WhatsAppMessage.find({ 
+                  sessionId: id, 
+                  $or: [{ from: sender }, { to: sender }] 
+                })
+                .sort({ timestamp: -1 })
+                .limit(settings.useAllContext ? 1000 : (settings.contextLimit || 10))
+                .lean() : Promise.resolve([]),
+              WhatsAppContact.findOne({ phoneNumber: customerNumber, linkedTo: myNumber }).lean()
             ]);
 
             const knowledge = kbData?.[0]?.content || "";
+            const nativeContext = contactData?.nativeContext || "No previous deep background known yet.";
+            
+            const messageContext = (history || [])
+              .reverse()
+              .map((h: any) => ({
+                role: h.senderType === 'customer' ? 'user' : 'assistant',
+                content: h.text
+              }));
+
             let response = "";
             let responseMedia: { url: string, type: string } | null = null;
 
             if (groqKey) {
-              const systemPrompt = `Role: ${agentName} (Professional Assistant). Knowledge: ${knowledge}. Rules: Be concise. If user asks to stop, include [BOT_STOP].`;
+              const systemPrompt = `
+Identity: You are the "Arventa AI Manager," a professional, high-performance executive assistant for a business operating via WhatsApp. Your primary goal is to provide accurate, helpful, and human-like responses based on the context provided.
+Native User Data (Long-term Memory): 
+${nativeContext}
+
+Operational Context:
+- Data Access: You are provided with "Native User Data" (summarized history) and a "Chat History" array. Always prioritize the summarized insights before replying.
+- Media Handling: Acknowledge references to PDFs and Audio files in the history professionally.
+- Memory: Your memory is stored in a centralized database linked to the root admin number 7872490719.
+- Knowledge Base: ${knowledge}
+Communication Guidelines:
+- Tone: Professional, grounded, and empathetic. Use a "helpful peer" tone—never robotic.
+- Language: Respond in the language the customer uses (Bengali, English, or Hinglish).
+- Admin Intervention: If you detect the Admin (Jaydeb/Owner) has already replied to a specific query, do not repeat the information.
+- Integrity: If you don't know an answer, politely ask the user to wait for a human representative.
+`.trim();
+
+              const groqMessages: any[] = [{ role: "system", content: systemPrompt }];
+              
+              if (messageContext.length > 0) {
+                groqMessages.push(...messageContext);
+              }
+
+              // Ensure the latest user prompt is included if not already at the end of history
+              if (groqMessages[groqMessages.length - 1]?.content !== fullUserText) {
+                groqMessages.push({ role: "user", content: fullUserText });
+              }
+
               try {
                 const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                   method: "POST",
                   headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
                   body: JSON.stringify({
                     model: settings.aiModel || "llama-3.3-70b-versatile",
-                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullUserText }],
+                    messages: groqMessages,
                     temperature: 0.6
                   })
                 });
@@ -402,17 +686,33 @@ class WhatsAppSessionManager {
               }
 
               if (mongoose.connection.readyState === 1 && sentMsg) {
-                await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+                const customerNumber = sender.split('@')[0];
+                
+                // Log AI Output
+                await WhatsAppMessage.create({
                   messageId: sentMsg.key.id,
                   sessionId: id,
-                  fromNumber: myNumber,
-                  toNumber: sender,
-                  fromMe: true,
+                  from: myFullJid,
+                  to: sender,
                   text: brandedText,
+                  senderType: "bot",
                   status: "sent",
                   isAi: true,
                   timestamp: new Date()
                 });
+
+                // Update Contact interaction & Increment Outgoing Counter
+                await WhatsAppContact.findOneAndUpdate(
+                  { phoneNumber: customerNumber, linkedTo: myNumber },
+                  {
+                    $set: { 
+                      lastMessage: brandedText.substring(0, 100),
+                      lastInteraction: new Date()
+                    },
+                    $inc: { totalOutgoing: 1, messageCounter: 1 }
+                  },
+                  { upsert: true }
+                );
               }
               console.log(`[AI Engine] Replied to ${sender} on ${id}`);
             }
@@ -429,9 +729,9 @@ class WhatsAppSessionManager {
           const statusMap: Record<number, string> = { 2: "sent", 3: "delivered", 4: "read" };
           const statusLabel = statusMap[update.update.status];
           if (statusLabel) {
-            await mongoose.connection.db?.collection("whatsapp_messages").updateOne(
+            await WhatsAppMessage.updateOne(
               { messageId: update.key.id },
-              { $set: { status: statusLabel, lastUpdate: new Date() } }
+              { $set: { status: statusLabel } }
             );
           }
         }
@@ -450,63 +750,99 @@ class WhatsAppSessionManager {
   }
 
   public async disconnect(id: string, deletePersistently: boolean = false) {
+    this.manualDisconnections.add(id);
+    this.updateStatus(id, { status: "disconnected", qr: null, me: null });
+
+    // Ensure DB is updated immediately to stop polling from picking up 'connected'
+    if (mongoose.connection.readyState === 1) {
+      await WhatsAppAccount.updateOne(
+        { sessionId: id },
+        { $set: { status: 'disconnected', isActive: !deletePersistently } }
+      );
+    }
+
     const socket = this.sockets.get(id);
     if (socket) {
       try {
-        await socket.logout();
+        // Fire and forget logout to avoid blocking the response
+        socket.logout().catch(e => console.error("Logout error:", e));
         socket.end(undefined);
       } catch (err) {
-        console.error(`Error disconnecting session ${id}:`, err);
+        console.error(`Error closing socket for session ${id}:`, err);
       }
       this.sockets.delete(id);
-      this.updateStatus(id, { status: "disconnected", qr: null, me: null });
     }
 
     if (deletePersistently) {
       this.statuses.delete(id);
       const authDir = path.join(this.sessionsDir, id);
       fs.rmSync(authDir, { recursive: true, force: true });
-
+      
       if (mongoose.connection.readyState === 1) {
-        await mongoose.connection.db?.collection("whatsapp_sessions").deleteOne({ sessionId: id });
-        if (this.primarySessionId === id) {
-          this.primarySessionId = "primary";
-          await this.setPrimary("primary");
-        }
+        await WhatsAppAccount.deleteOne({ sessionId: id });
       }
     }
   }
 
-  public async registerSession(id: string) {
-    this.updateStatus(id, { id, status: "disconnected", qr: null, me: null });
-    // Persist to DB so it survives restarts/reloads
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.db?.collection("whatsapp_sessions").updateOne(
-        { sessionId: id },
-        { $set: { sessionId: id, status: "disconnected", createdAt: new Date() } },
-        { upsert: true }
-      );
-    }
-  }
 
   public getSession(id: string) {
     return this.statuses.get(id);
   }
 
-  public getAllSessions() {
-    return Array.from(this.statuses.values()).filter(s => {
-      if (s.status === "connected" || s.status === "connecting") return true;
-      if (s.me) return true;
-      if (s.id === this.primarySessionId) return true;
-      // Allow idle disconnected sessions to persist if they were explicitly registered
-      const hasStatusInMap = this.statuses.has(s.id);
-      return hasStatusInMap;
-    });
+  public async getAllSessions() {
+    try {
+      if (mongoose.connection.readyState !== 1) return Array.from(this.statuses.values());
+
+      // Fetch all from DB
+      const dbSessions = await mongoose.connection.db?.collection("whatsapp_sessions").find({}).toArray();
+      
+      // Merge memory states into DB records
+      const result: any[] = [];
+      const seenIds = new Set();
+
+      if (dbSessions) {
+        for (const dbS of dbSessions) {
+          const mem = this.statuses.get(dbS.sessionId);
+          result.push(mem || {
+            id: dbS.sessionId,
+            status: dbS.status || "disconnected",
+            me: dbS.me || null,
+            qr: null
+          });
+          seenIds.add(dbS.sessionId);
+        }
+      }
+
+      // Add any very new sessions that are only in memory
+      for (const [id, status] of this.statuses.entries()) {
+        if (!seenIds.has(id)) {
+          result.push(status);
+        }
+      }
+
+      return result.sort((a, b) => {
+        if (a.status === 'connected' && b.status !== 'connected') return -1;
+        if (a.status !== 'connected' && b.status === 'connected') return 1;
+        return 0;
+      }).slice(0, 10);
+    } catch (err) {
+      console.error("[WhatsApp] Failed to fetch sessions:", err);
+      return Array.from(this.statuses.values());
+    }
   }
 
   public async requestPairingCode(id: string, phone: string): Promise<string> {
-    const socket = this.sockets.get(id);
-    if (!socket) throw new Error("Session is not ready. Please try connecting again.");
+    let socket = this.sockets.get(id);
+    
+    // Auto-init if socket is missing or not ready
+    if (!socket) {
+       console.log(`[WhatsApp] Requesting pairing for ${id} but socket missing. Initializing...`);
+       await this.initSession(id);
+       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for handshake
+       socket = this.sockets.get(id);
+    }
+
+    if (!socket) throw new Error("Session engine initialization failed. Please try again.");
 
     try {
       // Standardize phone number using libphonenumber-js for maximum reliability
@@ -515,16 +851,15 @@ class WhatsAppSessionManager {
 
       let formattedPhone = cleanPhone;
       if (parsed) {
-        formattedPhone = parsed.number.replace("+", ""); // international format without +
+        formattedPhone = parsed.number.replace("+", ""); 
       } else if (cleanPhone.length === 10) {
         formattedPhone = "91" + cleanPhone;
       }
 
-      console.log(`[WhatsApp] Requesting pairing code for ${formattedPhone} on session ${id}`);
+      console.log(`[WhatsApp] Requesting 8-digit grouping code for: ${formattedPhone} (Session: ${id})`);
 
       // Crucial: Small delay gives Baileys enough time to stabilize the socket handshake 
-      // before sending the pairing code request.
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       const code = await socket.requestPairingCode(formattedPhone);
       return code;
@@ -538,11 +873,77 @@ class WhatsAppSessionManager {
     return this.sockets.get(id);
   }
 
-  public getPrimaryId() {
-    return this.primarySessionId;
+  public async summarizeContext(customerNumber: string, myNumber: string, apiKey: string) {
+    try {
+      const contact = await WhatsAppContact.findOne({ phoneNumber: customerNumber, linkedTo: myNumber });
+      if (!contact) return;
+
+      const history = await WhatsAppMessage.find({ 
+          $or: [{ from: customerNumber + "@s.whatsapp.net" }, { to: customerNumber + "@s.whatsapp.net" }] 
+        })
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .lean();
+
+      if (history.length < 5) return;
+
+      const historyText = history.reverse().map(m => `${m.senderType}: ${m.text}`).join("\n");
+      const currentContext = contact.nativeContext || "No previous history.";
+
+      const prompt = `
+Task: Recursive Conversation Summarization.
+Input:
+1. Native User Data (Existing Summary): ${currentContext}
+2. Latest Messages (New context):
+${historyText}
+
+Instruction: 
+- Extract key insights, user preferences, names, specific requirements, and current status.
+- Merge these with the existing context.
+- Provide a highly condensed, structured summary.
+- Output ONLY the new summary text. No preamble.
+      `.trim();
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "system", content: prompt }],
+          temperature: 0.1
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json() as any;
+        const newSummary = data.choices?.[0]?.message?.content || "";
+        if (newSummary) {
+          await WhatsAppContact.updateOne(
+            { phoneNumber: customerNumber, linkedTo: myNumber },
+            { $set: { nativeContext: newSummary } }
+          );
+          console.log(`[summarizeContext] Success for ${customerNumber}`);
+        }
+      }
+    } catch (err) {
+      console.error("[summarizeContext] Error:", err);
+    }
   }
 
   private updateStatus(id: string, update: Partial<WhatsAppSession>) {
+    // Defensive check: Ensure maps exist
+    if (!this.statuses) this.statuses = new Map();
+
+    // Relaxed check: Allow updates if the session is currently being initialized (status connecting)
+    // or if it includes identity information (me), even if not yet in the memory map.
+    const isInMemory = this.statuses.has(id);
+    const isConnecting = update.status === "connecting";
+    const hasIdentity = !!update.me;
+
+    if (!isInMemory && !isConnecting && !hasIdentity) {
+      return; 
+    }
+
     const current = this.statuses.get(id) || { id, status: "disconnected", qr: null, me: null };
     this.statuses.set(id, { ...current, ...update });
   }
@@ -554,5 +955,14 @@ export const initWhatsApp = () => {
   whatsappManager.loadSessions().catch(console.error);
 };
 
-export const getPrimaryStatus = () => whatsappManager.getSession(whatsappManager.getPrimaryId())?.status || "disconnected";
-export const getPrimarySocket = () => whatsappManager.getSocket(whatsappManager.getPrimaryId());
+export const getPrimaryStatus = () => {
+  const sessions = whatsappManager.getAllSessions();
+  const connected = sessions.find(s => s.status === 'connected');
+  return connected ? 'connected' : 'disconnected';
+};
+
+export const getPrimarySocket = () => {
+  const sessions = whatsappManager.getAllSessions();
+  const connected = sessions.find(s => s.status === 'connected');
+  return connected ? whatsappManager.getSocket(connected.id) : null;
+};

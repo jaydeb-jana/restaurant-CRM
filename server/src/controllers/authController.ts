@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import getBranding from "../config/branding.js";
+import WhatsAppMessage from "../models/WhatsAppMessage.js";
 
 import { 
   getPrimaryStatus, 
@@ -38,13 +39,13 @@ export const sendOTP = async (req: Request, res: Response, next: NextFunction) =
       const sentMsg = await socket.sendMessage(chatId, { text: otpTemplate });
       
       if (mongoose.connection.readyState === 1) {
-        await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+        await WhatsAppMessage.create({
           messageId: sentMsg?.key.id,
           sessionId: "primary",
-          fromNumber: socket.user?.id.split(':')[0] || "primary",
-          toNumber: chatId,
-          fromMe: true,
+          from: socket.user?.id.split(':')[0] || "primary",
+          to: chatId,
           text: `[OTP] ${otpTemplate.slice(0, 50)}...`,
+          senderType: "bot",
           status: "sent",
           isSystem: true,
           timestamp: new Date()

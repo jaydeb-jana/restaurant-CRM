@@ -1,11 +1,13 @@
 import { whatsappManager, formatPhoneForWhatsApp } from "../config/whatsapp.js";
 import mongoose from "mongoose";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
+import WhatsAppContact from "../models/WhatsAppContact.js";
+import WhatsAppMessage from "../models/WhatsAppMessage.js";
 
 export class WhatsAppService {
   static async getStatus() {
-    const sessions = whatsappManager.getAllSessions();
-    const primaryId = whatsappManager.getPrimaryId();
-    return { sessions, primaryId };
+    const sessions = await whatsappManager.getAllSessions();
+    return { sessions };
   }
 
   static async requestPairingCode(sessionId: string, phone: string) {
@@ -13,7 +15,8 @@ export class WhatsAppService {
   }
 
   static async sendTestMessage(phone: string, message: string, sessionId: string, media?: any) {
-    const id = sessionId || "primary";
+    const all = await whatsappManager.getAllSessions();
+    const id = sessionId && sessionId !== "primary" ? sessionId : (all.find(s => s.status === 'connected')?.id || "primary");
     const socket = whatsappManager.getSocket(id);
     const session = whatsappManager.getSession(id);
 
@@ -54,13 +57,13 @@ export class WhatsAppService {
     const myNumber = session?.me?.number || id;
     
     if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+      await WhatsAppMessage.create({
         messageId: sentMsg?.key.id,
         sessionId: id,
-        fromNumber: myNumber, // Outgoing: From is our account
-        toNumber: chatId,     // Outgoing: To is the remote user
-        fromMe: true,
+        from: myNumber, // Outgoing: From is our account
+        to: chatId,     // Outgoing: To is the remote user
         text: message || (media ? "[Media Message]" : ""),
+        senderType: "admin",
         status: "sent",
         timestamp: new Date()
       });
@@ -70,7 +73,8 @@ export class WhatsAppService {
   }
 
   static async bulkSend(phones: string[], message: string | string[], sessionId: string, media?: any, delayMs: number = 1000) {
-    const id = sessionId || "primary";
+    const all = await whatsappManager.getAllSessions();
+    const id = sessionId && sessionId !== "primary" ? sessionId : (all.find(s => s.status === 'connected')?.id || "primary");
     const socket = whatsappManager.getSocket(id);
     const session = whatsappManager.getSession(id);
 
@@ -140,16 +144,17 @@ export class WhatsAppService {
         const myNumber = session?.me?.number || id;
         
         if (mongoose.connection.readyState === 1) {
-          await mongoose.connection.db?.collection("whatsapp_messages").insertOne({
+          await WhatsAppMessage.create({
             messageId: sentMsg?.key.id,
             sessionId: id,
-            fromNumber: myNumber,
-            toNumber: chatId,
-            fromMe: true,
+            from: myNumber,
+            to: chatId,
             text: randomMessage || (media ? "[Media Message]" : ""),
+            senderType: "admin",
             status: "sent",
-            isCampaign: true,
-            campaignId: broadcastId,
+            isAi: false,
+            // Custom fields for filtering if we add them to schema later, or just use these for now
+            ...( { isCampaign: true, campaignId: broadcastId } as any ),
             timestamp: new Date()
           });
         }
@@ -200,5 +205,23 @@ export class WhatsAppService {
       const { _id, ...rest } = doc;
       return rest;
     }) || [];
+  }
+
+  static async summarizeAll(sessionId: string) {
+    const session = await WhatsAppAccount.findOne({ sessionId });
+    if (!session || !session.phoneNumber) throw new Error("Session not found or not linked");
+
+    const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "global" }) as any;
+    if (!settings?.groqApiKey) throw new Error("Groq API key not configured");
+
+    const contacts = await WhatsAppContact.find({ linkedTo: session.phoneNumber });
+    if (!contacts.length) return { success: true, count: 0 };
+
+    // Fire background summarizations
+    contacts.forEach(c => {
+      whatsappManager.summarizeContext(c.phoneNumber, session.phoneNumber!, settings.groqApiKey).catch(console.error);
+    });
+
+    return { success: true, count: contacts.length };
   }
 }

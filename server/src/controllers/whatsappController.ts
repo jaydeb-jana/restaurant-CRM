@@ -11,6 +11,15 @@ export const getStatus = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
+export const cleanup = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await whatsappManager.cleanupUnlinkedSessions();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const requestPairingCode = async (req: Request, res: Response, next: NextFunction) => {
   const { id, phone } = req.body;
   if (!phone) return res.status(400).json({ error: "Phone number is required." });
@@ -24,21 +33,9 @@ export const requestPairingCode = async (req: Request, res: Response, next: Next
   }
 };
 
-export const setPrimary = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ error: "Session ID required" });
-  try {
-    await whatsappManager.setPrimary(id);
-    res.json({ success: true, primaryId: id });
-  } catch (err) {
-    next(err);
-  }
-};
-
 export const connect = async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.body;
   const sessionId = id || "primary";
-  
   try {
     await whatsappManager.initSession(sessionId);
     res.json({ success: true, message: `Initializing WhatsApp session ${sessionId}...` });
@@ -106,6 +103,40 @@ export const bulkSend = async (req: Request, res: Response, next: NextFunction) 
       message: `Broadcast engine for ${phones.length} recipients has been successfully initiated. Process will continue in the background even if you close your browser.`,
       dispatchId: Date.now().toString()
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const summarizeAll = async (req: Request, res: Response, next: NextFunction) => {
+  const { sessionId } = req.body;
+  try {
+    const result = await WhatsAppService.summarizeAll(sessionId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const summarizeSingle = async (req: Request, res: Response, next: NextFunction) => {
+  const { sessionId, customerNumber } = req.body;
+  if (!customerNumber) return res.status(400).json({ error: "Customer number required" });
+  
+  try {
+    const session = await mongoose.connection.db?.collection("whatsapp_sessions").findOne({ id: sessionId });
+    const myNumber = session?.me?.number;
+    
+    if (!myNumber) {
+      return res.status(400).json({ error: "Session or account number not found" });
+    }
+
+    const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
+    if (!settings?.groqApiKey) {
+      return res.status(400).json({ error: "Groq API key not configured in settings" });
+    }
+
+    await whatsappManager.summarizeContext(customerNumber, myNumber, settings.groqApiKey);
+    res.json({ success: true, message: `Context for ${customerNumber} has been compressed into memory.` });
   } catch (err) {
     next(err);
   }

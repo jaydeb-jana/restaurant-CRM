@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000/api/v1";
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000/api/v1";
 
 export const api = {
   get: async (collection: string) => {
@@ -93,13 +93,9 @@ export const api = {
       });
       return res.json();
     },
-    setPrimary: async (id: string) => {
-       const res = await fetch(`${API_BASE}/whatsapp/set-primary`, { 
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id })
-      });
-      return res.json();
+    cleanup: async () => {
+       const res = await fetch(`${API_BASE}/whatsapp/cleanup`, { method: "POST" });
+       return res.json();
     },
     sendTest: async (phone: string, message: string, sessionId: string = "primary", media?: any) => {
       const res = await fetch(`${API_BASE}/whatsapp/send-test`, {
@@ -126,6 +122,22 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: sessionId, phone }),
+      });
+      return res.json();
+    },
+    summarizeAll: async (sessionId: string) => {
+      const res = await fetch(`${API_BASE}/whatsapp/summarize-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      return res.json();
+    },
+    summarizeSingle: async (sessionId: string, customerNumber: string) => {
+      const res = await fetch(`${API_BASE}/whatsapp/summarize-single`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, customerNumber }),
       });
       return res.json();
     }

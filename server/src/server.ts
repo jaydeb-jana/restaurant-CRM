@@ -10,7 +10,6 @@ import getBranding from "./config/branding.js";
 async function startServer() {
 
   const app: Application = express();
-  app.set('trust proxy', true);
   const PORT = env.PORT || 3000;
 
   // Security Hardening

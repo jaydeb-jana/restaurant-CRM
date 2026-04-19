@@ -28,14 +28,16 @@ router.put("/settings", dbController.updateSettings);
 
 // WhatsApp Routes
 router.get("/whatsapp/status", whatsappController.getStatus);
+router.post("/whatsapp/cleanup", whatsappController.cleanup);
 router.post("/whatsapp/connect", whatsappController.connect);
 router.post("/whatsapp/register", whatsappController.register);
 router.post("/whatsapp/pairing-code", whatsappController.requestPairingCode);
-router.post("/whatsapp/set-primary", whatsappController.setPrimary);
 router.post("/whatsapp/disconnect", whatsappController.disconnect);
 router.post("/whatsapp/send-test", whatsappController.sendTest);
 router.get("/whatsapp/customers", whatsappController.getCustomers);
 router.post("/whatsapp/bulk-send", whatsappController.bulkSend);
+router.post("/whatsapp/summarize-all", whatsappController.summarizeAll);
+router.post("/whatsapp/summarize-single", whatsappController.summarizeSingle);
 
 // Auth Routes
 router.post("/auth/whatsapp/otp", authController.sendOTP);

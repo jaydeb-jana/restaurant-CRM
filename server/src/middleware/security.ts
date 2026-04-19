@@ -8,7 +8,11 @@ import { env } from '../config/env.config.js';
 
 export const setupSecurity = (app: Application) => {
   // Set security HTTP headers
-  app.use(helmet());
+  // Set security HTTP headers with relaxed COOP/CORP for development
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "unsafe-none" }
+  }));
 
   // CORS configuration
   // const corsOptions = {
@@ -32,9 +36,10 @@ export const setupSecurity = (app: Application) => {
 
   // Limit requests from same API
   const limiter = rateLimit({
-    max: 1000, // Increased to allow dashboard polling
+    max: 2000, // Increased for dashboard polling
     windowMs: 15 * 60 * 1000, 
     message: 'Too many requests from this IP, please try again in 15 minutes!',
+    validate: { trustProxy: false }, // Critical fix for the ValidationError
   });
   app.use('/api', limiter);
 

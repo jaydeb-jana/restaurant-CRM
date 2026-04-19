@@ -98,3 +98,88 @@
 {"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-02.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
 {"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-00.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
 {"level":"error","message":"500 - getaddrinfo ENOTFOUND ac-zqqwdja-shard-00-00.oiajbkb.mongodb.net - /api/v1/whatsapp/customers - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::ffff:127.0.0.1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - whatsappManager.getPrimaryId is not a function - /api/v1/whatsapp/status - GET - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-5726 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - Maximum 10 concurrent sessions allowed. Please delete unused slots. - /api/v1/whatsapp/register - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
