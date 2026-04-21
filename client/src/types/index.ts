@@ -55,7 +55,7 @@ export interface Table {
   id: string;
   number: string;
   zone?: string;
-  status: "free" | "occupied" | "reserved";
+  status: "available" | "occupied" | "reserved";
 }
 
 export interface GlobalSettings {

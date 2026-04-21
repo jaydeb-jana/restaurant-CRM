@@ -16,6 +16,11 @@ const WhatsAppAccountSchema: Schema = new Schema({
   name: { type: String, default: "WhatsApp Business" },
   status: { type: String, enum: ["connected", "disconnected", "connecting"], default: "disconnected" },
   profilePic: { type: String },
+  me: {
+    name: String,
+    number: String,
+    profilePic: String
+  },
   lastSeen: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });

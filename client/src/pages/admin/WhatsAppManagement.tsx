@@ -89,6 +89,8 @@ const WhatsAppManagement = () => {
   useEffect(() => {
     if (selectedSessionId) {
       localStorage.setItem('last_wa_session', selectedSessionId);
+    } else {
+      localStorage.removeItem('last_wa_session');
     }
   }, [selectedSessionId]);
   const [loading, setLoading] = useState(true);
@@ -228,6 +230,9 @@ const WhatsAppManagement = () => {
       sunday: { from: "00:00", to: "23:59", active: true },
     }
   });
+
+  const [blockedNumbers, setBlockedNumbers] = useState("");
+  const [useLinkedNumbersBlock, setUseLinkedNumbersBlock] = useState(true);
 
   const fetchHistory = async () => {
     try {
@@ -383,6 +388,8 @@ const WhatsAppManagement = () => {
         if (settings.autoTypingSimulation !== undefined) setAutoTypingSimulation(settings.autoTypingSimulation);
         if (settings.aiSchedule) setAiSchedule(settings.aiSchedule);
         if (settings.summarizationFrequency) setSummarizationFrequency(settings.summarizationFrequency);
+        if (settings.blockedNumbers) setBlockedNumbers(settings.blockedNumbers);
+        if (settings.useLinkedNumbersBlock !== undefined) setUseLinkedNumbersBlock(settings.useLinkedNumbersBlock);
       }
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -442,7 +449,9 @@ const WhatsAppManagement = () => {
         globalAiActive,
         autoTypingSimulation,
         aiSchedule,
-        summarizationFrequency
+        summarizationFrequency,
+        blockedNumbers,
+        useLinkedNumbersBlock
       });
       showAlert("Protection & Communication protocols updated!", "success");
     } catch (error) {
@@ -1277,6 +1286,51 @@ const WhatsAppManagement = () => {
                           )}
                         </div>
                       </div>
+
+                      <div className="space-y-6 pt-12 border-t border-gray-100 animate-in fade-in duration-1000">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+                              <ShieldAlert className="w-4 h-4 text-red-500" />
+                              AI Intelligent Blocker
+                            </h4>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Prevent AI from responding to specific contacts</p>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 bg-white px-5 py-3 rounded-[1.5rem] border border-gray-100 shadow-sm">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("text-[9px] font-black uppercase tracking-widest transition-colors", useLinkedNumbersBlock ? "text-red-500" : "text-slate-300")}>Linked Number Blocks</span>
+                              <button 
+                                onClick={() => setUseLinkedNumbersBlock(!useLinkedNumbersBlock)}
+                                className={cn("w-10 h-5 rounded-full p-1 transition-all duration-300 relative shadow-inner", useLinkedNumbersBlock ? "bg-red-500" : "bg-gray-200")}
+                              >
+                                <div className={cn("w-3 h-3 bg-white rounded-full shadow-md transition-transform duration-300", useLinkedNumbersBlock ? "translate-x-5" : "translate-x-0")} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-gray-100 space-y-4">
+                           <div className="flex items-center justify-between px-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Manual Block Registry (Comma/Newline separated)</label>
+                              <div className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                                {blockedNumbers.split(/[\n,]+/).filter(n => n.trim().length > 0).length} Blocked
+                              </div>
+                           </div>
+                           <textarea
+                            placeholder="917872490719, 918877665544..."
+                            value={blockedNumbers}
+                            onChange={(e) => setBlockedNumbers(e.target.value)}
+                            className="w-full h-32 px-6 py-5 rounded-[2rem] bg-white border border-gray-200 focus:ring-4 focus:ring-red-500/5 transition-all font-medium text-sm resize-none shadow-sm"
+                           />
+                           <div className="flex items-center gap-3 px-4 py-3 bg-white/50 rounded-xl border border-gray-100">
+                              <AlertCircle className="w-4 h-4 text-slate-400" />
+                              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest italic leading-relaxed">
+                                Messages from these numbers will arrive in WhatsApp but the AI agent will intentionally ignore them.
+                              </p>
+                           </div>
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1716,9 +1770,13 @@ const WhatsAppManagement = () => {
                                 className="w-full px-6 py-4 rounded-xl bg-white border border-gray-200 focus:ring-4 focus:ring-slate-900/5 font-bold text-sm shadow-sm"
                               >
                                 <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Powerful)</option>
+                                <option value="llama3-70b-8192">Llama 3 70B (Power)</option>
                                 <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
+                                <option value="llama3-8b-8192">Llama 3 8B (Efficient)</option>
+                                <option value="llama-3.2-11b-vision-preview">Llama 3.2 11B (Vision)</option>
                                 <option value="mixtral-8x7b-32768">Mixtral 8x7B (Reliable)</option>
                                 <option value="qwen-2.5-72b-instruct">Qwen 2.5 72B (Advanced)</option>
+                                <option value="qwen/qwen3-32b">Qwen 3 32B (Experimental)</option>
                               </select>
                             </div>
                             <div className="space-y-4">

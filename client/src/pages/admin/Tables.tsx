@@ -24,7 +24,7 @@ const AdminTables = () => {
   const [formData, setFormData] = useState({
     number: "",
     zone: "",
-    status: "free" as Table["status"]
+    status: "available" as Table["status"]
   });
 
   const fetchTables = async () => {
@@ -44,6 +44,10 @@ const AdminTables = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.number.trim() || !formData.zone.trim()) {
+      alert("Please enter both Table Number and Zone / Area");
+      return;
+    }
     try {
       if (editingTable) {
         await api.put("tables", editingTable.id, formData);
@@ -70,7 +74,7 @@ const AdminTables = () => {
   };
 
   const resetForm = () => {
-    setFormData({ number: "", zone: "", status: "free" });
+    setFormData({ number: "", zone: "", status: "available" });
     setEditingTable(null);
   };
 
@@ -86,9 +90,8 @@ const AdminTables = () => {
 
   const getStatusColor = (status: Table["status"]) => {
     switch (status) {
-      case "free": return "bg-green-100 text-green-700 border-green-200";
+      case "available": return "bg-green-100 text-green-700 border-green-200";
       case "occupied": return "bg-red-100 text-red-700 border-red-200";
-      case "reserved": return "bg-yellow-100 text-yellow-700 border-yellow-200";
       default: return "bg-gray-100 text-gray-700 border-gray-200";
     }
   };
@@ -152,7 +155,7 @@ const AdminTables = () => {
                       "inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border mb-2",
                       getStatusColor(table.status)
                     )}>
-                      {table.status}
+                      {table.status === "available" ? "Available" : "Occupied"}
                     </div>
                     <p className="text-sm font-medium text-gray-400 flex items-center">
                       <LayoutGrid className="w-3 h-3 mr-1.5" />
@@ -212,7 +215,7 @@ const AdminTables = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-8">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Table Number</label>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Table Number *</label>
                     <input 
                       required
                       type="text"
@@ -224,8 +227,9 @@ const AdminTables = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Zone / Area</label>
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Zone / Area *</label>
                     <input 
+                      required
                       type="text"
                       value={formData.zone}
                       onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
@@ -236,8 +240,8 @@ const AdminTables = () => {
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Initial Status</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {(["free", "occupied", "reserved"] as const).map((status) => (
+                    <div className="grid grid-cols-2 gap-3">
+                      {(["available", "occupied"] as const).map((status) => (
                         <button
                           key={status}
                           type="button"
@@ -249,7 +253,7 @@ const AdminTables = () => {
                               : "bg-gray-50 text-gray-400 hover:bg-gray-100"
                           )}
                         >
-                          {status}
+                          {status === "available" ? "Available" : "Occupied"}
                         </button>
                       ))}
                     </div>

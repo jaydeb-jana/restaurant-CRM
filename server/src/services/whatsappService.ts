@@ -211,7 +211,7 @@ export class WhatsAppService {
     const session = await WhatsAppAccount.findOne({ sessionId });
     if (!session || !session.phoneNumber) throw new Error("Session not found or not linked");
 
-    const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "global" }) as any;
+    const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" }) as any;
     if (!settings?.groqApiKey) throw new Error("Groq API key not configured");
 
     const contacts = await WhatsAppContact.find({ linkedTo: session.phoneNumber });

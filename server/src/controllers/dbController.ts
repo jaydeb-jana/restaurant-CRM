@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import getBranding from "../config/branding.js";
 
+const maskApiKey = (key: string) => {
+  if (!key) return "";
+  if (key.length <= 12) return "****************";
+  return `${key.slice(0, 6)}****************${key.slice(-4)}`;
+};
+
 
 export const getCollection = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -94,6 +100,12 @@ export const getSettings = async (req: Request, res: Response, next: NextFunctio
     };
 
     const { _id, ...cleanSettings } = mergedSettings as any;
+    
+    // Mask sensitive keys
+    if (cleanSettings.groqApiKey) {
+      cleanSettings.groqApiKey = maskApiKey(cleanSettings.groqApiKey);
+    }
+
     res.json(cleanSettings);
   } catch (error) {
     res.status(500).json({ error: "Settings read error" });
@@ -102,18 +114,36 @@ export const getSettings = async (req: Request, res: Response, next: NextFunctio
 
 export const updateSettings = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const updateData = { ...req.body };
+
+    // If the API key is masked, don't update it in the DB
+    if (updateData.groqApiKey && updateData.groqApiKey.includes("****")) {
+      delete updateData.groqApiKey;
+    }
+
     const updateResult = await mongoose.connection.db?.collection("settings").findOneAndUpdate(
       { id: "app-settings" },
-      { $set: req.body },
+      { $set: updateData },
       { returnDocument: "after", upsert: true }
     );
+
     if (updateResult) {
-      const { _id, ...rest } = updateResult as any;
-      res.json(rest);
-    } else {
-      res.json({ id: "app-settings", ...req.body });
+      // Handle both old and new MongoDB driver return formats (value property vs direct doc)
+      const resultDoc = (updateResult as any).value || updateResult;
+      
+      if (resultDoc && typeof resultDoc === 'object') {
+        if (resultDoc.groqApiKey) {
+          resultDoc.groqApiKey = maskApiKey(resultDoc.groqApiKey);
+        }
+        const { _id, ...rest } = resultDoc;
+        return res.json(rest);
+      }
     }
+    
+    // Fallback response
+    res.json({ id: "app-settings", ...updateData });
   } catch (error) {
+    console.error("Settings update error:", error);
     res.status(500).json({ error: "Settings update error" });
   }
 };

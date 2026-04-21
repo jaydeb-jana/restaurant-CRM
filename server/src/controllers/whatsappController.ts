@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import { WhatsAppService } from "../services/whatsappService.js";
 import { whatsappManager } from "../config/whatsapp.js";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
 
 export const getStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -123,8 +125,8 @@ export const summarizeSingle = async (req: Request, res: Response, next: NextFun
   if (!customerNumber) return res.status(400).json({ error: "Customer number required" });
   
   try {
-    const session = await mongoose.connection.db?.collection("whatsapp_sessions").findOne({ id: sessionId });
-    const myNumber = session?.me?.number;
+    const account = await WhatsAppAccount.findOne({ sessionId });
+    const myNumber = account?.phoneNumber;
     
     if (!myNumber) {
       return res.status(400).json({ error: "Session or account number not found" });

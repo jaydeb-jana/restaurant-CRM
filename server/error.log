@@ -183,3 +183,7 @@
 {"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
 {"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
 {"level":"error","message":"500 - WhatsApp session session-8431 not connected - /api/v1/whatsapp/send-test - POST - ::1"}
+{"level":"error","message":"500 - read ECONNRESET - /api/v1/whatsapp/cleanup - POST - ::1"}
+{"level":"error","message":"500 - read ECONNRESET - /api/v1/whatsapp/cleanup - POST - ::1"}
+{"level":"error","message":"500 - connect ETIMEDOUT 159.41.196.36:27017 - /api/v1/whatsapp/cleanup - POST - ::1"}
+{"level":"error","message":"500 - connect ETIMEDOUT 159.41.196.22:27017 - /api/v1/whatsapp/customers - GET - ::1"}

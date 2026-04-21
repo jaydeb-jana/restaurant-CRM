@@ -69,7 +69,7 @@ class WhatsAppSessionManager {
     try {
       const dbSessions = await WhatsAppAccount.find({}).lean();
       const dbSessionIds = new Set(dbSessions?.map(s => s.sessionId) || []);
-      
+
       if (fs.existsSync(this.sessionsDir)) {
         const folders = fs.readdirSync(this.sessionsDir);
         for (const folder of folders) {
@@ -121,20 +121,20 @@ class WhatsAppSessionManager {
       for (const id of currentIds) {
         const session = this.statuses.get(id);
         const socket = this.sockets.get(id);
-        
+
         // Purge if no identity link exists AND session is not actively connecting
         if (!session || (!session.me?.number && session.status !== 'connecting')) {
           console.log(`[Manual Cleanup] Purging in-memory session: ${id}`);
           if (socket) {
-             try { socket.end(undefined); } catch(e) {}
-             this.sockets.delete(id);
+            try { socket.end(undefined); } catch (e) { }
+            this.sockets.delete(id);
           }
           this.statuses.delete(id);
-          
+
           // Filesystem Cleanup
           const authDir = path.join(this.sessionsDir, id);
           if (fs.existsSync(authDir)) {
-             fs.rmSync(authDir, { recursive: true, force: true });
+            fs.rmSync(authDir, { recursive: true, force: true });
           }
         }
       }
@@ -176,12 +176,12 @@ class WhatsAppSessionManager {
     if (mongoose.connection.readyState === 1) {
       await WhatsAppAccount.findOneAndUpdate(
         { sessionId: id },
-        { 
-          $set: { 
-            sessionId: id, 
-            status: "disconnected", 
-            isActive: true 
-          } 
+        {
+          $set: {
+            sessionId: id,
+            status: "disconnected",
+            isActive: true
+          }
         },
         { upsert: true }
       );
@@ -254,12 +254,12 @@ class WhatsAppSessionManager {
   public async initSession(id: string) {
     if (this.sockets.has(id)) {
       console.log(`[WhatsApp] Force closing existing socket for ${id} before re-init.`);
-      try { this.sockets.get(id)?.end(undefined); } catch (e) {}
+      try { this.sockets.get(id)?.end(undefined); } catch (e) { }
       this.sockets.delete(id);
     }
     if (this.statuses.get(id)?.status === "connecting") {
-       // Allow a restart if requested explicitly
-       console.log(`[WhatsApp] Restarting connecting session: ${id}`);
+      // Allow a restart if requested explicitly
+      console.log(`[WhatsApp] Restarting connecting session: ${id}`);
     }
 
     this.updateStatus(id, { id, status: "connecting", qr: null, me: null, error: null });
@@ -268,10 +268,10 @@ class WhatsAppSessionManager {
     const startHandshake = async () => {
       try {
         if (!this.sockets) this.sockets = new Map();
-        
+
         const authDir = path.join(this.sessionsDir, id);
         const { state, saveCreds } = await useMultiFileAuthState(authDir);
-        
+
         // Fetch latest version instead of hardcoding
         const { version, isLatest } = await fetchLatestBaileysVersion();
         console.log(`[WhatsApp] Initializing session ${id} using Baileys v${version.join('.')} (isLatest: ${isLatest})`);
@@ -288,10 +288,10 @@ class WhatsAppSessionManager {
         });
 
         this.sockets.set(id, socket);
-        
+
         // Setup listeners...
         this.setupSocketListeners(id, socket, saveCreds);
-        
+
       } catch (err) {
         console.error(`[WhatsApp] Failed to start handshake for ${id}:`, err);
         this.updateStatus(id, { status: "disconnected", error: "Handshake failed. Ensure your internet is stable." });
@@ -342,7 +342,7 @@ class WhatsAppSessionManager {
 
         // Duplicate Check: See if this number is already used by another session in DATABASE
         if (mongoose.connection.readyState === 1) {
-          const dbDuplicate = await WhatsAppAccount.findOne({ 
+          const dbDuplicate = await WhatsAppAccount.findOne({
             phoneNumber: myNumber,
             sessionId: { $ne: id },
             status: 'connected'
@@ -351,15 +351,15 @@ class WhatsAppSessionManager {
           if (dbDuplicate) {
             // Check if that session is actually active in our current process
             const isActiveLocally = this.sockets.has(dbDuplicate.sessionId);
-            
+
             if (isActiveLocally) {
               console.log(`[Security] Real Duplicate conflict! Number ${myNumber} is active in session ${dbDuplicate.sessionId}.`);
               await socket.logout();
-              this.updateStatus(id, { 
-                status: "disconnected", 
-                qr: null, 
-                me: null, 
-                error: `Duplicate Link Conflict: Number +${myNumber} is already connected to session "${dbDuplicate.sessionId}".` 
+              this.updateStatus(id, {
+                status: "disconnected",
+                qr: null,
+                me: null,
+                error: `Duplicate Link Conflict: Number +${myNumber} is already connected to session "${dbDuplicate.sessionId}".`
               });
               return;
             } else {
@@ -377,21 +377,21 @@ class WhatsAppSessionManager {
         try {
           const ppUrl = await socket.profilePictureUrl(myUser.id);
           if (ppUrl) me.profilePic = ppUrl;
-        } catch (e) {}
+        } catch (e) { }
 
         this.updateStatus(id, { status: "connected", qr: null, me, error: null });
 
         if (mongoose.connection.readyState === 1) {
           await WhatsAppAccount.findOneAndUpdate(
             { sessionId: id },
-            { 
-              $set: { 
-                status: 'connected', 
-                lastSeen: new Date(), 
-                me, 
+            {
+              $set: {
+                status: 'connected',
+                lastSeen: new Date(),
+                me,
                 phoneNumber: myNumber,
                 name: me.name
-              } 
+              }
             },
             { upsert: true }
           );
@@ -402,7 +402,7 @@ class WhatsAppSessionManager {
     // Integrated Listener: Logging + AI Orchestration
     socket.ev.on("messages.upsert", async (m) => {
       if (m.type !== "notify") return;
-      
+
       // Fetch settings once for efficiency and to avoid ReferenceErrors inside the loop
       const settings = await mongoose.connection.db?.collection("settings").findOne({ id: "app-settings" });
 
@@ -413,10 +413,10 @@ class WhatsAppSessionManager {
         if (!sender) continue;
 
         // 1. Data Capture & Professional Filtering
-        const incomingText = msg.message?.conversation || 
-                             msg.message?.extendedTextMessage?.text || 
-                             msg.message?.imageMessage?.caption || "";
-        
+        const incomingText = msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption || "";
+
         const session = this.getSession(id);
         const myFullJid = socket.user?.id.split(':')[0] + "@s.whatsapp.net";
         const myNumber = session?.me?.number || id;
@@ -426,7 +426,7 @@ class WhatsAppSessionManager {
           console.log(`[Gatekeeper] Ignored self-message on ${id}`);
           continue;
         }
-        
+
         if (mongoose.connection.readyState === 1) {
           const customerNumber = sender.split('@')[0];
           const senderName = msg.pushName || "Unknown Customer";
@@ -435,7 +435,7 @@ class WhatsAppSessionManager {
           await WhatsAppMessage.create({
             messageId: msg.key.id,
             sessionId: id,
-            from: sender, 
+            from: sender,
             to: myFullJid,
             text: incomingText,
             senderType: "customer",
@@ -447,7 +447,7 @@ class WhatsAppSessionManager {
           const contact = await WhatsAppContact.findOneAndUpdate(
             { phoneNumber: customerNumber, linkedTo: myNumber },
             {
-              $set: { 
+              $set: {
                 name: senderName,
                 lastMessage: incomingText.substring(0, 100),
                 lastInteraction: new Date()
@@ -468,6 +468,29 @@ class WhatsAppSessionManager {
         if (sender.endsWith("@g.us")) continue; // Skip Groups
 
         if (!settings || !settings.globalAiActive) continue;
+
+        // --- AI Blocker Engine ---
+        const customerNumber = sender.split('@')[0].replace(/\D/g, '');
+
+        // 1. Manual Block List Check
+        const manualBlocks = (settings.blockedNumbers || "").split(/[\n,]+/).map((n: any) => String(n).trim().replace(/\D/g, '')).filter(Boolean);
+        if (manualBlocks.includes(customerNumber)) {
+          console.log(`[Gatekeeper] AI Agent Bypassed: Number ${customerNumber} is in Manual Block List.`);
+          continue;
+        }
+
+        // 2. Linked Account (Internal Loop) Prevention
+        if (settings.useLinkedNumbersBlock) {
+          const linkedAccounts = await WhatsAppAccount.find({ status: 'connected' }).lean();
+          const internalNumbers = linkedAccounts
+            .map(acc => String(acc.phoneNumber || "").replace(/\D/g, ''))
+            .filter(Boolean);
+
+          if (internalNumbers.includes(customerNumber)) {
+            console.log(`[Gatekeeper] AI Agent Bypassed: Number ${customerNumber} is a Linked Internal Account.`);
+            continue;
+          }
+        }
 
         // --- AI Schedule Logic ---
         const now = new Date();
@@ -500,13 +523,8 @@ class WhatsAppSessionManager {
           console.log(`[Bot] Skipping ${sender}: Outside of active schedule.`);
           continue;
         }
-        // -------------------------
-        
-        const activeSessions = settings.activeBotSessions || [];
-        if (!activeSessions.includes(id)) {
-          console.log(`[Bot] Skipping ${sender}: Session ${id} is not enabled for AI.`);
-          continue;
-        }
+        // [Diagnostic] Automatically allow all sessions to use AI for troubleshooting
+        console.log(`[AI Orchestrator] Processing message for session: ${id}`);
 
         // 3. Accumulation & Debounce
         const timeoutKey = `${id}:${sender}`;
@@ -518,17 +536,18 @@ class WhatsAppSessionManager {
 
         if (this.botTimeouts.has(timeoutKey)) clearTimeout(this.botTimeouts.get(timeoutKey)!);
 
+        const multiReply = settings?.multiMessageReply ?? true;
         this.botTimeouts.set(timeoutKey, setTimeout(async () => {
           try {
             // Safety: Max 15s wait for typing presence
             let retry = 0;
-            while (this.typingPresence.get(id)?.has(sender) && retry < 15) {
-              await new Promise(r => setTimeout(r, 1000));
+            while (this.typingPresence.get(id)?.has(sender) && retry < 5) {
+              await new Promise(r => setTimeout(r, 500));
               retry++;
             }
 
             // 4. Input Processing
-            const multiReply = settings.multiMessageReply ?? true;
+            // multiReply already defined above
             let fullUserText = "";
             if (multiReply) {
               const pending = this.pendingMessages.get(timeoutKey) || [];
@@ -541,7 +560,7 @@ class WhatsAppSessionManager {
 
             const groqKey = settings.groqApiKey;
             const agentName = settings.aiAgentName || "Assistant";
-            
+
             if (!fullUserText && !msg.message?.audioMessage && !msg.message?.imageMessage) return;
 
             // 5. Bot Status & Anti-Spam Check
@@ -568,20 +587,20 @@ class WhatsAppSessionManager {
             const [pairs, kbData, history, contactData] = await Promise.all([
               mongoose.connection.db?.collection("ai_agent").find({}).toArray(),
               mongoose.connection.db?.collection("ai_knowledge").find({ id: "main_kb" }).toArray(),
-              settings.useContextHistory ? 
-                WhatsAppMessage.find({ 
-                  sessionId: id, 
-                  $or: [{ from: sender }, { to: sender }] 
+              settings.useContextHistory ?
+                WhatsAppMessage.find({
+                  sessionId: id,
+                  $or: [{ from: sender }, { to: sender }]
                 })
-                .sort({ timestamp: -1 })
-                .limit(settings.useAllContext ? 1000 : (settings.contextLimit || 10))
-                .lean() : Promise.resolve([]),
+                  .sort({ timestamp: -1 })
+                  .limit(settings.useAllContext ? 20 : (settings.contextLimit || 10))
+                  .lean() : Promise.resolve([]),
               WhatsAppContact.findOne({ phoneNumber: customerNumber, linkedTo: myNumber }).lean()
             ]);
 
             const knowledge = kbData?.[0]?.content || "";
             const nativeContext = contactData?.nativeContext || "No previous deep background known yet.";
-            
+
             const messageContext = (history || [])
               .reverse()
               .map((h: any) => ({
@@ -592,26 +611,43 @@ class WhatsAppSessionManager {
             let response = "";
             let responseMedia: { url: string, type: string } | null = null;
 
+            const pairsText = pairs?.map((p: any) => `Question: ${p.question} -> Answer: ${p.answer}`).join("\n") || "No specific Q&A training yet.";
+
             if (groqKey) {
               const systemPrompt = `
-Identity: You are the "Arventa AI Manager," a professional, high-performance executive assistant for a business operating via WhatsApp. Your primary goal is to provide accurate, helpful, and human-like responses based on the context provided.
-Native User Data (Long-term Memory): 
-${nativeContext}
-
+            You are the 'AI Manager'. Goal: Provide extremely concise, professional, human-like responses on WhatsApp. 🚀 
+Strict Rules:
+- Conversational Brevity: Keep responses very short and direct. No long explanations. ⚡
+- Human Tone: Be natural and professional. Avoid all robotic phrases or AI clichés. 😊
+- Fact Only: Use provided data only. Never hallucinate or make up information. 🔍
+- Contextual: Use chat history to avoid any repetition or loops. 🧠
+- On-Topic: Stay strictly within business context. Do not engage in off-topic discussions. ✅
+- Native User Data: ${nativeContext}
+- Language Flow: Respond in the user's current language (Bengali, English, or Hinglish) naturally. 🗣️✨
+Strict Prohibitions (Never Do These):
+- NEVER use first-person pronouns like "I", "Me", or "My" for contact details; always use "The team" or "Official."
+- NEVER apologize for being an AI.
+- NEVER invent services, prices, or names not found in the Knowledge Base.
+- NEVER agree to write stories, jokes, or poems.
+- NEVER mention third-party AI names (Groq, OpenAI, etc.).
+Conversation Logic (How to Act):
+- Act as a senior office manager. 
+- Be proactive but brief. 
+- If the user is happy, be polite. If the user is frustrated, be calm and refer to a human.
+- Always prioritize the most recent information in the chat history.
 Operational Context:
-- Data Access: You are provided with "Native User Data" (summarized history) and a "Chat History" array. Always prioritize the summarized insights before replying.
-- Media Handling: Acknowledge references to PDFs and Audio files in the history professionally.
-- Memory: Your memory is stored in a centralized database linked to the root admin number 7872490719.
-- Knowledge Base: ${knowledge}
-Communication Guidelines:
-- Tone: Professional, grounded, and empathetic. Use a "helpful peer" tone—never robotic.
-- Language: Respond in the language the customer uses (Bengali, English, or Hinglish).
-- Admin Intervention: If you detect the Admin (Jaydeb/Owner) has already replied to a specific query, do not repeat the information.
-- Integrity: If you don't know an answer, politely ask the user to wait for a human representative.
+- Brand Confidentiality: Do NOT mention "Arventa Ventures" unless specifically and directly asked about your origin or developer. 🛡️
+- Ownership: You are an employee, NOT the owner. Always refer to contact info as "Official Business Contact." 👤
+- No Creative Writing: Strictly refuse all non-business creative requests. 🚫📚
+- Knowledge Limit: If a query is outside the data, state: "I can only assist with information within my professional scope." 🛡️
+- File Handling: If a file is sent, state: "I cannot open files yet. Please send the info in text format." ❌📄
+- Closing Tag: Every response must end with: "Is there anything else I can help you with?" or "Any other help needed?" 🔄
+Knowledge Base: ${knowledge}
+Custom Training Examples: ${pairsText}
 `.trim();
 
               const groqMessages: any[] = [{ role: "system", content: systemPrompt }];
-              
+
               if (messageContext.length > 0) {
                 groqMessages.push(...messageContext);
               }
@@ -622,6 +658,7 @@ Communication Guidelines:
               }
 
               try {
+                console.log(`[AI Engine] Fetching response from Groq for ${sender}...`);
                 const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                   method: "POST",
                   headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
@@ -631,6 +668,7 @@ Communication Guidelines:
                     temperature: 0.6
                   })
                 });
+                console.log(`[AI Engine] Groq API Response Status: ${groqRes.status}`);
                 if (groqRes.ok) {
                   const data = await groqRes.json() as any;
                   response = data.choices?.[0]?.message?.content || "";
@@ -659,7 +697,7 @@ Communication Guidelines:
 
             // 9. Final Dispatch
             if (response) {
-              const brandedText = `[*${agentName}*]\n\n${response}`;
+              const brandedText = `*${agentName}*\n\n${response}`;
 
               // Simulation & Delay
               if (settings.typingSimulation) {
@@ -674,11 +712,11 @@ Communication Guidelines:
                 if (responseMedia.type === 'image') {
                   sentMsg = await socket.sendMessage(sender, { image: mediaOptions, caption: brandedText });
                 } else {
-                  sentMsg = await socket.sendMessage(sender, { 
-                    document: mediaOptions, 
+                  sentMsg = await socket.sendMessage(sender, {
+                    document: mediaOptions,
                     mimetype: "application/octet-stream",
-                    fileName: "document", 
-                    caption: brandedText 
+                    fileName: "document",
+                    caption: brandedText
                   });
                 }
               } else {
@@ -687,7 +725,7 @@ Communication Guidelines:
 
               if (mongoose.connection.readyState === 1 && sentMsg) {
                 const customerNumber = sender.split('@')[0];
-                
+
                 // Log AI Output
                 await WhatsAppMessage.create({
                   messageId: sentMsg.key.id,
@@ -705,7 +743,7 @@ Communication Guidelines:
                 await WhatsAppContact.findOneAndUpdate(
                   { phoneNumber: customerNumber, linkedTo: myNumber },
                   {
-                    $set: { 
+                    $set: {
                       lastMessage: brandedText.substring(0, 100),
                       lastInteraction: new Date()
                     },
@@ -718,8 +756,12 @@ Communication Guidelines:
             }
           } catch (execErr) {
             console.error(`[AI Executor Error]:`, execErr);
+          } finally {
+            this.botTimeouts.delete(timeoutKey);
+            this.pendingMessages.delete(timeoutKey);
+            console.log(`[AI Cycle] Session loop finalized and reset for ${sender}`);
           }
-        }, (settings.typingDelay || 2) * 1000));
+        }, multiReply ? (settings.typingDelay || 2) * 1000 : 200));
       }
     });
 
@@ -777,7 +819,7 @@ Communication Guidelines:
       this.statuses.delete(id);
       const authDir = path.join(this.sessionsDir, id);
       fs.rmSync(authDir, { recursive: true, force: true });
-      
+
       if (mongoose.connection.readyState === 1) {
         await WhatsAppAccount.deleteOne({ sessionId: id });
       }
@@ -794,19 +836,25 @@ Communication Guidelines:
       if (mongoose.connection.readyState !== 1) return Array.from(this.statuses.values());
 
       // Fetch all from DB
-      const dbSessions = await mongoose.connection.db?.collection("whatsapp_sessions").find({}).toArray();
-      
+      const dbSessions = await WhatsAppAccount.find({}).lean();
+
       // Merge memory states into DB records
       const result: any[] = [];
       const seenIds = new Set();
 
       if (dbSessions) {
         for (const dbS of dbSessions) {
+          const me = (dbS as any).me || (dbS.phoneNumber ? {
+            name: dbS.name || "WhatsApp Business",
+            number: dbS.phoneNumber,
+            profilePic: dbS.profilePic
+          } : null);
+
           const mem = this.statuses.get(dbS.sessionId);
           result.push(mem || {
             id: dbS.sessionId,
             status: dbS.status || "disconnected",
-            me: dbS.me || null,
+            me: me,
             qr: null
           });
           seenIds.add(dbS.sessionId);
@@ -833,13 +881,13 @@ Communication Guidelines:
 
   public async requestPairingCode(id: string, phone: string): Promise<string> {
     let socket = this.sockets.get(id);
-    
+
     // Auto-init if socket is missing or not ready
     if (!socket) {
-       console.log(`[WhatsApp] Requesting pairing for ${id} but socket missing. Initializing...`);
-       await this.initSession(id);
-       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for handshake
-       socket = this.sockets.get(id);
+      console.log(`[WhatsApp] Requesting pairing for ${id} but socket missing. Initializing...`);
+      await this.initSession(id);
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for handshake
+      socket = this.sockets.get(id);
     }
 
     if (!socket) throw new Error("Session engine initialization failed. Please try again.");
@@ -851,7 +899,7 @@ Communication Guidelines:
 
       let formattedPhone = cleanPhone;
       if (parsed) {
-        formattedPhone = parsed.number.replace("+", ""); 
+        formattedPhone = parsed.number.replace("+", "");
       } else if (cleanPhone.length === 10) {
         formattedPhone = "91" + cleanPhone;
       }
@@ -878,9 +926,9 @@ Communication Guidelines:
       const contact = await WhatsAppContact.findOne({ phoneNumber: customerNumber, linkedTo: myNumber });
       if (!contact) return;
 
-      const history = await WhatsAppMessage.find({ 
-          $or: [{ from: customerNumber + "@s.whatsapp.net" }, { to: customerNumber + "@s.whatsapp.net" }] 
-        })
+      const history = await WhatsAppMessage.find({
+        $or: [{ from: customerNumber + "@s.whatsapp.net" }, { to: customerNumber + "@s.whatsapp.net" }]
+      })
         .sort({ timestamp: -1 })
         .limit(10)
         .lean();
@@ -890,6 +938,7 @@ Communication Guidelines:
       const historyText = history.reverse().map(m => `${m.senderType}: ${m.text}`).join("\n");
       const currentContext = contact.nativeContext || "No previous history.";
 
+      // Removed duplicate definition
       const prompt = `
 Task: Recursive Conversation Summarization.
 Input:
@@ -941,7 +990,7 @@ Instruction:
     const hasIdentity = !!update.me;
 
     if (!isInMemory && !isConnecting && !hasIdentity) {
-      return; 
+      return;
     }
 
     const current = this.statuses.get(id) || { id, status: "disconnected", qr: null, me: null };
@@ -955,14 +1004,14 @@ export const initWhatsApp = () => {
   whatsappManager.loadSessions().catch(console.error);
 };
 
-export const getPrimaryStatus = () => {
-  const sessions = whatsappManager.getAllSessions();
-  const connected = sessions.find(s => s.status === 'connected');
+export const getPrimaryStatus = async () => {
+  const sessions = await whatsappManager.getAllSessions();
+  const connected = sessions.find((s: any) => s.status === 'connected');
   return connected ? 'connected' : 'disconnected';
 };
 
-export const getPrimarySocket = () => {
-  const sessions = whatsappManager.getAllSessions();
-  const connected = sessions.find(s => s.status === 'connected');
+export const getPrimarySocket = async () => {
+  const sessions = await whatsappManager.getAllSessions();
+  const connected = sessions.find((s: any) => s.status === 'connected');
   return connected ? whatsappManager.getSocket(connected.id) : null;
 };

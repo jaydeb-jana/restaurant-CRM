@@ -14,8 +14,8 @@ export const sendOTP = async (req: Request, res: Response, next: NextFunction) =
   const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Real random OTP
   console.log(`Sending OTP ${otp} to ${phone}`);
 
-  const status = getPrimaryStatus();
-  const socket = getPrimaryClient();
+  const status = await getPrimaryStatus();
+  const socket = await getPrimaryClient();
 
   if (status === "connected" && socket) {
     try {

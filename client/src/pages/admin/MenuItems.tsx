@@ -29,20 +29,14 @@ const AdminMenuItems = () => {
     name: "",
     description: "",
     price: "",
-    categoryId: "",
     image: "",
-    isAvailable: true,
-    isPopular: false
+    isAvailable: true
   });
 
   const fetchData = async () => {
     try {
-      const [items, cats] = await Promise.all([
-        api.get("menuItems"),
-        api.get("categories")
-      ]);
+      const items = await api.get("menuItems");
       setMenuItems(items);
-      setCategories(cats.map((c: any, i: number) => typeof c === 'string' ? { id: c.toLowerCase().replace(/\s+/g, '-'), name: c, order: i } : c));
       setLoading(false);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -91,10 +85,8 @@ const AdminMenuItems = () => {
       name: "",
       description: "",
       price: "",
-      categoryId: "",
       image: "",
-      isAvailable: true,
-      isPopular: false
+      isAvailable: true
     });
     setEditingItem(null);
   };
@@ -105,10 +97,8 @@ const AdminMenuItems = () => {
       name: item.name,
       description: item.description,
       price: item.price.toString(),
-      categoryId: item.categoryId,
       image: item.image,
-      isAvailable: item.isAvailable,
-      isPopular: item.isPopular
+      isAvailable: item.isAvailable
     });
     setIsModalOpen(true);
   };
@@ -116,8 +106,7 @@ const AdminMenuItems = () => {
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = (item?.name || "").toLowerCase().includes((search || "").toLowerCase()) || 
                          (item?.description || "").toLowerCase().includes((search || "").toLowerCase());
-    const matchesCategory = selectedCategory === "all" || item.categoryId === selectedCategory;
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   if (loading) {
@@ -153,32 +142,8 @@ const AdminMenuItems = () => {
             placeholder="Search menu items..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#FC8019]/20 focus:border-[#FC8019] transition-all"
+            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#FC8019]/20 focus:border-[#FC8019] transition-all font-bold"
           />
-        </div>
-        
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-          <button 
-            onClick={() => setSelectedCategory("all")}
-            className={cn(
-              "px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all",
-              selectedCategory === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-500 border border-gray-100 hover:bg-gray-50"
-            )}
-          >
-            All Categories
-          </button>
-          {categories.map(cat => (
-            <button 
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={cn(
-                "px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all",
-                selectedCategory === cat.id ? "bg-gray-900 text-white" : "bg-white text-gray-500 border border-gray-100 hover:bg-gray-50"
-              )}
-            >
-              {cat.name}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -200,11 +165,6 @@ const AdminMenuItems = () => {
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 />
                 <div className="absolute top-4 right-4 flex space-x-2">
-                  {item.isPopular && (
-                    <div className="bg-yellow-400 text-white p-2 rounded-xl shadow-lg">
-                      <Star className="w-4 h-4 fill-current" />
-                    </div>
-                  )}
                   <div className={cn(
                     "px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-lg",
                     item.isAvailable ? "bg-green-500 text-white" : "bg-red-500 text-white"
@@ -221,10 +181,7 @@ const AdminMenuItems = () => {
                 </div>
                 <p className="text-sm text-gray-500 line-clamp-2 mb-6 h-10">{item.description}</p>
                 
-                <div className="flex items-center justify-between pt-6 border-t border-gray-50">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    {categories.find(c => c.id === item.categoryId)?.name || "Uncategorized"}
-                  </span>
+                <div className="flex items-center justify-end pt-6 border-t border-gray-50">
                   <div className="flex items-center space-x-2">
                     <button 
                       onClick={() => openEditModal(item)}
@@ -315,30 +272,45 @@ const AdminMenuItems = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Category</label>
-                      <select 
-                        required
-                        value={formData.categoryId}
-                        onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                        className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#FC8019]/20 transition-all font-medium appearance-none"
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Item Image</label>
+                    <div className="flex items-center justify-center w-full">
+                      <label 
+                        className={cn(
+                          "flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-200 rounded-[2rem] cursor-pointer bg-gray-50 hover:bg-gray-100 transition-all overflow-hidden group",
+                          formData.image && "border-none"
+                        )}
                       >
-                        <option value="">Select Category</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Image URL</label>
-                      <input 
-                        type="text"
-                        value={formData.image}
-                        onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                        className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#FC8019]/20 transition-all font-medium"
-                        placeholder="https://..."
-                      />
+                        {formData.image ? (
+                          <div className="relative w-full h-full">
+                            <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <p className="text-white text-xs font-bold uppercase tracking-widest">Change Image</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <ImageIcon className="w-10 h-10 mb-4 text-gray-300" />
+                            <p className="mb-2 text-sm text-gray-500 font-bold">Click to upload image</p>
+                            <p className="text-xs text-gray-400 uppercase tracking-widest">PNG, JPG or WebP</p>
+                          </div>
+                        )}
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setFormData({ ...formData, image: reader.result as string });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
                   </div>
 
@@ -356,23 +328,7 @@ const AdminMenuItems = () => {
                           formData.isAvailable ? "left-7" : "left-1"
                         )} />
                       </div>
-                      <span className="text-sm font-bold text-gray-700">Available</span>
-                    </label>
-
-                    <label className="flex items-center space-x-3 cursor-pointer group">
-                      <div 
-                        onClick={() => setFormData({ ...formData, isPopular: !formData.isPopular })}
-                        className={cn(
-                          "w-12 h-6 rounded-full transition-all relative",
-                          formData.isPopular ? "bg-yellow-400" : "bg-gray-200"
-                        )}
-                      >
-                        <div className={cn(
-                          "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                          formData.isPopular ? "left-7" : "left-1"
-                        )} />
-                      </div>
-                      <span className="text-sm font-bold text-gray-700">Popular Item</span>
+                      <span className="text-sm font-bold text-gray-700 uppercase tracking-widest">Available</span>
                     </label>
                   </div>
 

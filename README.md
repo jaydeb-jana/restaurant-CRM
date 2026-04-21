@@ -29,5 +29,4 @@ Our system ensures that every transaction—whether online or offline—is track
 * **Integration:** PhonePe Payment Gateway API
 * **Automation:** Startup Task / Foreground Service (Daemon)
 * **Hardware:** Amazon Basics Multimedia Speakers
-
 ---
