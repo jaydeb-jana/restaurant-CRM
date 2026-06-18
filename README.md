@@ -25,7 +25,7 @@ Our system ensures that every transaction—whether online or offline—is track
 ---
 
 ## 🛠 Tech Stack
-* **Backend:** Node.js
+* **Backend:** Node.js and express js
 * **Integration:** PhonePe Payment Gateway API
 * **Automation:** Startup Task / Foreground Service (Daemon)
 * **Hardware:** Amazon Basics Multimedia Speakers
